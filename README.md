@@ -1,15 +1,8 @@
-# 3D CT Annotator
+# 3D CT Annotator 🦴
 
-A Python-based GUI tool for efficiently annotating 3D landmarks on CT scans using bounding boxes. Designed for medical research data collection.
+An annotation tool for localizaing landmarks on CT scans. A user is given two views (AP and Lateral), and asked to add bounding boxes over regions of interest (ROI) in both views. As the views are orthoogonal, we can exactly localize the ROIs in 3D 💀🎯
 
 ![Annotator Overview](./assets/overview.png)
-
-## Features
-- **Multi-View Interface**: AP, Lateral, and MPR (Axial, Coronal, Sagittal) views.
-- **Smart Navigation**: Quickly switch between patients and landmarks.
-- **Auto-Saving**: Never lose progress; annotations are saved automatically when moving to the next landmark.
-- **Modifiable History**: Navigate back to previous landmarks to view or correct your submissions.
-- **Z-Axis Locking**: Guides align across views to ensure accurate 3D positioning.
 
 ## Installation
 
