@@ -36,6 +36,17 @@ HU_SCALES = {
 }
 OUTPUT_CSV = "annotations.csv"
 
+STUDY_INSTRUCTIONS = (
+    "Thank you for participating in this study.\n\n"
+    "Goal: To create a high-quality dataset of anatomical landmarks.\n\n"
+    "Instructions:\n"
+    "1. You will be presented with a series of CT cases.\n"
+    "2. For each case, locate the requested landmarks.\n"
+    "3. Draw bounding boxes on the AP and Lateral views.\n"
+    "4. Use the MPR views to refine your selection.\n"
+    "5. Press 'Next' to save and proceed."
+)
+
 # --- Login Dialog ---
 class LoginDialog:
     def __init__(self, parent):
@@ -59,17 +70,9 @@ class LoginDialog:
         # Content
         ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
         
-        info_text = (
-            "Thank you for participating in this study.\n\n"
-            "Goal: To create a high-quality dataset of anatomical landmarks.\n\n"
-            "Instructions:\n"
-            "1. You will be presented with a series of CT cases.\n"
-            "2. For each case, locate the requested landmarks.\n"
-            "3. Draw bounding boxes on the AP and Lateral views.\n"
-            "4. Use the MPR views to refine your selection.\n"
-            "5. Press 'Next' to save and proceed."
-        )
-        lbl_info = ttk.Label(self.top, text=info_text, style="Body.TLabel", wraplength=450, justify="left")
+        ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        
+        lbl_info = ttk.Label(self.top, text=STUDY_INSTRUCTIONS, style="Body.TLabel", wraplength=450, justify="left")
         lbl_info.pack(pady=10, padx=20)
         
         # Input
@@ -238,6 +241,9 @@ class TkAnnotator:
         
         self.lbl_status = ttk.Label(self.frame_controls, text="", foreground="green")
         self.lbl_status.pack(pady=10)
+        
+        # Help Button
+        ttk.Button(self.frame_controls, text="Help / Instructions", command=self.show_help).pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
     def setup_canvas(self):
         # Matplotlib Figure
@@ -684,6 +690,16 @@ class TkAnnotator:
         self.ax_sagittal.add_patch(self.rect_sagittal)
         
         self.canvas.draw()    
+        
+    def show_help(self):
+        root = tk.Toplevel(self.root)
+        root.title("Instructions")
+        root.geometry("500x400")
+        
+        ttk.Label(root, text="Instructions", font=("Segoe UI", 14, "bold")).pack(pady=15)
+        ttk.Label(root, text=STUDY_INSTRUCTIONS, wraplength=450, justify="left").pack(padx=20, pady=10)
+        
+        ttk.Button(root, text="Close", command=root.destroy).pack(pady=20)
         
 if __name__ == "__main__":
     import argparse
