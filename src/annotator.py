@@ -65,15 +65,21 @@ class TkAnnotator:
         self.hu_scale = "Default"
         
         # Annotation State
-        self.ap_box = None
-        self.lat_box = None
-        self.rect_ap_patch = None
-        self.rect_lat_patch = None
+        # Annotation State
+        self.box_3d = None # [x1, x2, y1, y2, z1, z2]
+        
+        # Patches
+        self.rect_ap = None
+        self.rect_lat = None
+        self.rect_axial = None
+        self.rect_coronal = None
+        self.rect_sagittal = None
+        
         self.last_draw_time = 0
         self.is_submitted = False
         
         # --- UI Setup ---
-        self.setup_theme() # NEW: Theme setup
+        self.setup_theme()
         self.setup_layout()
         self.setup_controls()
         self.setup_canvas()
@@ -101,7 +107,7 @@ class TkAnnotator:
         self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
         
-        # Left Panel (Controls) - Increased width for bigger fonts
+        # Left Panel (Controls)
         self.frame_controls = ttk.Frame(self.paned, padding=15, width=350) 
         self.paned.add(self.frame_controls, weight=0)
         
@@ -170,7 +176,7 @@ class TkAnnotator:
         action_group = ttk.Frame(self.frame_controls)
         action_group.pack(fill=tk.X, pady=20)
         
-        ttk.Button(action_group, text="Visual Check (MPR)", command=self.visual_check).pack(fill=tk.X, pady=5)
+        # Trigger removed: Visual Check is now automatic
         btn_submit = ttk.Button(action_group, text="Submit Annotation", command=self.submit_annotation)
         btn_submit.pack(fill=tk.X, pady=5)
         
@@ -179,71 +185,60 @@ class TkAnnotator:
 
     def setup_canvas(self):
         # Matplotlib Figure
-        # 1 Row, 3 Cols (AP, Lat, MPR)
-        self.fig = Figure(figsize=(15, 8), dpi=100)
-        gs = gridspec.GridSpec(3, 3, width_ratios=[1, 1, 0.6])
+        # 2 Rows: Top (AP, Lat), Bottom (MPRs)
+        self.fig = Figure(figsize=(15, 9), dpi=100)
+        # Maximize space: small margins
+        self.fig.subplots_adjust(left=0.005, right=0.995, top=0.96, bottom=0.005)
         
-        # AP View
-        self.ax_ap = self.fig.add_subplot(gs[:, 0])
-        self.ax_ap.set_title("AP View")
+        # Grid: hspace/wspace minimized
+        gs = gridspec.GridSpec(2, 6, height_ratios=[1.5, 1], hspace=0.15, wspace=0.05)
         
-        # Lat View
-        self.ax_lat = self.fig.add_subplot(gs[:, 1])
-        self.ax_lat.set_title("Lateral View")
+        # AP View (Top Left)
+        self.ax_ap = self.fig.add_subplot(gs[0, 0:3])
+        self.ax_ap.set_title("AP View (X-Z)")
         
-        # MPR Views
-        self.ax_axial = self.fig.add_subplot(gs[0, 2])
-        self.ax_axial.set_title("Axial")
-        self.ax_coronal = self.fig.add_subplot(gs[1, 2])
-        self.ax_coronal.set_title("Coronal")
-        self.ax_sagittal = self.fig.add_subplot(gs[2, 2])
-        self.ax_sagittal.set_title("Sagittal")
+        # Lat View (Top Right)
+        self.ax_lat = self.fig.add_subplot(gs[0, 3:6])
+        self.ax_lat.set_title("Lateral View (Y-Z)")
         
-        self.fig.tight_layout()
+        # MPR Views (Bottom Row)
+        self.ax_axial = self.fig.add_subplot(gs[1, 0:2])
+        self.ax_axial.set_title("Axial (X-Y)")
+        self.ax_coronal = self.fig.add_subplot(gs[1, 2:4])
+        self.ax_coronal.set_title("Coronal (X-Z)")
+        self.ax_sagittal = self.fig.add_subplot(gs[1, 4:6])
+        self.ax_sagittal.set_title("Sagittal (Y-Z)")
         
-        # Instructions Panel (Bottom) - Pack FIRST so it's always visible
-        self.setup_instructions()
+        # Overlay Instructions Panel (Use place instead of pack)
+        self.setup_instructions_overlay()
 
         # Canvas Widget
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame_canvas)
         self.canvas.draw()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
-        # Z-Lines (Animated)
-        self.z_line_lat = self.ax_lat.axhline(0, color='cyan', linestyle='-', linewidth=1, alpha=0, animated=True)
-        self.z_line_ap = self.ax_ap.axhline(0, color='cyan', linestyle='-', linewidth=1, alpha=0, animated=True)
-        
-        # Blitting Backgrounds
-        self.bg_ap = None
-        self.bg_lat = None
-        self.canvas.mpl_connect('draw_event', self.on_draw)
+        self.canvas.mpl_connect('draw_event', self.on_draw) 
 
-    def setup_instructions(self):
+    def setup_instructions_overlay(self):
         # Styled Protocol Frame
         style = ttk.Style()
-        style.configure("Instr.TLabel", font=("Segoe UI", 10), padding=2)
+        style.configure("Instr.TLabel", font=("Segoe UI", 10), padding=2, background="white")
+        style.configure("Instr.TLabelframe", background="white")
+        style.configure("Instr.TLabelframe.Label", background="white", font=("Segoe UI", 10, "bold"))
         
-        instr_frame = ttk.LabelFrame(self.frame_canvas, text="Annotation Protocol", padding=(15, 10))
-        instr_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=(0, 10))
+        self.instr_frame = ttk.LabelFrame(self.frame_canvas, text="Protocol", style="Instr.TLabelframe", padding=(10, 5))
+        
+        # Place at bottom left of canvas frame, floating
+        self.instr_frame.place(relx=0.01, rely=0.99, anchor="sw")
         
         steps = [
-            "1. Enter your Full Name (Resident).",
-            "2. Locate current landmark on AP & Lateral views.",
-            "3. Draw bounding boxes on BOTH views (Z-line is your guide).",
-            "4. Verify using 'Visual Check' & adjust if needed.",
-            "5. Click 'Next LM' to Auto-Save & Continue.",
-            "6. Repeat for all landmarks, then click 'Next Case'.",
-            "Note: Multiple submissions per landmark are accepted if corrections are needed."
+            "1. Resident Name",
+            "2. Draw on AP/Lat",
+            "3. Refine on MPR",
+            "4. Next LM"
         ]
-        
-        # Grid steps for a neat 2-column look if it fits, or just list them.
-        # Let's do a flow layout using a single label for simplicity and alignment.
-        full_text = "  |  ".join(steps[:3]) + "\n" + "  |  ".join(steps[3:6]) + "\n" + steps[6]
-        
-        # Alternatively, a clean vertical list is easier to read quickly
-        lbl_text = "\n".join(steps)
-        
-        ttk.Label(instr_frame, text=lbl_text, style="Instr.TLabel", justify=tk.LEFT).pack(anchor=tk.W)
+        lbl_text = " | ".join(steps)
+        ttk.Label(self.instr_frame, text=lbl_text, style="Instr.TLabel").pack()
 
     # --- Logic ---
 
@@ -270,34 +265,6 @@ class TkAnnotator:
         # Initial Display
         self.on_landmark_change(None)
 
-    def display_base_images(self):
-        dx, dy, dz = self.voxel_sizes
-        
-        # AP
-        self.ax_ap.clear()
-        self.ax_ap.imshow(self.ap_view, cmap='gray', origin='lower')
-        self.ax_ap.set_aspect(dz/dx)
-        self.ax_ap.set_title("AP View")
-        
-        # Lat
-        self.ax_lat.clear()
-        self.ax_lat.imshow(self.lat_view, cmap='gray', origin='lower')
-        self.ax_lat.set_aspect(dz/dy)
-        self.ax_lat.set_title("Lateral View")
-        
-        # Selectors (Must recreate on clear)
-        self.rs_ap = RectangleSelector(self.ax_ap, self.on_select_ap, useblit=True, button=[1], 
-                                       minspanx=5, minspany=5, spancoords='pixels', interactive=True)
-        self.rs_lat = RectangleSelector(self.ax_lat, self.on_select_lat, useblit=True, button=[1], 
-                                       minspanx=5, minspany=5, spancoords='pixels', interactive=True)
-        
-        # Z-lines
-        self.z_line_lat = self.ax_lat.axhline(0, color='cyan', linestyle='-', linewidth=1, alpha=0, animated=True)
-        self.z_line_ap = self.ax_ap.axhline(0, color='cyan', linestyle='-', linewidth=1, alpha=0, animated=True)
-        
-        self.canvas.draw()
-
-
     # --- Callbacks ---
     def prev_case(self): 
         self.submit_annotation(silent=True) # Auto-save
@@ -322,9 +289,14 @@ class TkAnnotator:
         
         self.display_base_images()
         
-        if self.ap_box and self.lat_box:
-           self.display_annotation(self.ap_box, self.lat_box)
+        # If box exists, refresh MPRs with new HU scaling
+        if self.box_3d:
+           self.visual_check()
         else:
+           # If no box, ensure MPRs are cleared (in case they had content)
+           self.ax_axial.clear(); self.ax_axial.set_title("Axial (X-Y)")
+           self.ax_coronal.clear(); self.ax_coronal.set_title("Coronal (X-Z)")
+           self.ax_sagittal.clear(); self.ax_sagittal.set_title("Sagittal (Y-Z)")
            self.canvas.draw()
             
     def apply_hu_scale(self):
@@ -371,140 +343,120 @@ class TkAnnotator:
         if not self.load_existing_annotation():
             self.clear_visuals()
 
-    def clear_visuals(self):
-        self.ap_box = None
-        self.lat_box = None
-        self.rect_ap_patch = None
-        self.rect_lat_patch = None
+    def display_base_images(self):
+        dx, dy, dz = self.voxel_sizes
         
-        # Aggressive Reset: Redraw Base Images to wipe everything
-        self.display_base_images()
+        # Helper to setup view
+        def setup_view(ax, data, aspect, title, callback):
+            ax.clear()
+            ax.imshow(data, cmap='gray', origin='lower')
+            ax.set_aspect(aspect)
+            ax.set_title(title)
+            return RectangleSelector(ax, callback, useblit=True, button=[1], 
+                                     minspanx=5, minspany=5, spancoords='pixels', interactive=False)
         
-        # Clear MPRs
-        self.ax_axial.clear(); self.ax_axial.set_title("Axial")
-        self.ax_coronal.clear(); self.ax_coronal.set_title("Coronal")
-        self.ax_sagittal.clear(); self.ax_sagittal.set_title("Sagittal")
+        # 1. AP (X-Z)
+        self.rs_ap = setup_view(self.ax_ap, self.ap_view, dz/dx, "AP View (X-Z)", self.on_select_ap)
+        
+        # 2. Lat (Y-Z)
+        self.rs_lat = setup_view(self.ax_lat, self.lat_view, dz/dy, "Lateral View (Y-Z)", self.on_select_lat)
+        
+        # MPR Setup removed: Initially empty until box selected
+        
         self.canvas.draw()
         
+        # If we have existing annotation, show it (and generate MPRs)
+        if self.box_3d:
+            self.visual_check()
+
+    def clear_visuals(self):
+        self.box_3d = None
+        self.rect_ap = None; self.rect_lat = None
+        self.rect_axial = None; self.rect_coronal = None; self.rect_sagittal = None
+        
+        # Explicit clear of MPR views
+        self.ax_axial.clear(); self.ax_axial.set_title("Axial (X-Y)")
+        self.ax_coronal.clear(); self.ax_coronal.set_title("Coronal (X-Z)")
+        self.ax_sagittal.clear(); self.ax_sagittal.set_title("Sagittal (Y-Z)")
+        
+        self.display_base_images()
         self.update_coords_label()
 
     def update_coords_label(self):
-        coords = self.get_xyz()
-        if coords:
-            cx, cy, cz = coords
+        if self.box_3d:
+            x1, x2, y1, y2, z1, z2 = self.box_3d
+            cx, cy, cz = (x1+x2)/2, (y1+y2)/2, (z1+z2)/2
             self.lbl_coords.config(text=f"Sel: X={cx:.1f}, Y={cy:.1f}, Z={cz:.1f}")
         else:
-            self.lbl_coords.config(text="Sel: None (0, 0, 0)")
+            self.lbl_coords.config(text="Sel: None")
 
     # --- Drawing Logic ---
     def on_draw(self, event):
         if event is not None and event.canvas != self.canvas: return
-        self.bg_ap = self.canvas.copy_from_bbox(self.ax_ap.bbox)
-        self.bg_lat = self.canvas.copy_from_bbox(self.ax_lat.bbox)
-        # Redraw patches if they exist + Z lines
-        if self.rect_ap_patch: self.ax_ap.draw_artist(self.rect_ap_patch)
-        if self.rect_lat_patch: self.ax_lat.draw_artist(self.rect_lat_patch)
-        self.ax_ap.draw_artist(self.z_line_ap)
-        self.ax_lat.draw_artist(self.z_line_lat)
+        # Simple full redraw for now to ensure stability with 5 views
+        # Blitting 5 views is complex to manage perfect background restores
+        pass 
 
-    def on_select_ap(self, eclick, erelease):
-        if time.time() - self.last_draw_time < 0.05: return
-        self.last_draw_time = time.time()
+    def update_box_from_view(self, view_name, dim_indices, values):
+        """
+        view_name: str
+        dim_indices: list of indices in box_3d [x1, x2, y1, y2, z1, z2] to update
+        values: list of new values corresponding to dim_indices
+        """
+        if not self.box_3d:
+            # Initialize with whole volume or sensible default if starting from MPR? 
+            # Usually start from AP/Lat. If starting MPR, valid other dims are needed.
+            # providing defaults from volume center if needed.
+            nx, ny, nz = self.data.shape
+            self.box_3d = [0, nx, 0, ny, 0, nz]
+            
+        for idx, val in zip(dim_indices, values):
+            self.box_3d[idx] = val
+            
+        self.visual_check()
         self.is_submitted = False
-        
-        x1, y1 = eclick.xdata, eclick.ydata
-        x2, y2 = erelease.xdata, erelease.ydata
-        z_min, z_max = min(y1, y2), max(y1, y2)
-        z_center = (z_min + z_max) / 2
-        
-        self.ap_box = (min(x1, x2), max(x1, x2), z_min, z_max)
-        
-        # 1. Create Persistent Patch on AP
-        if self.rect_ap_patch: 
-            try: self.rect_ap_patch.remove()
-            except: pass
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
-        self.rect_ap_patch = Rectangle((min(x1, x2), min(y1, y2)), width, height, 
-                                       linewidth=1, edgecolor='red', facecolor='none', animated=True)
-        self.ax_ap.add_patch(self.rect_ap_patch)
-        
-        # 2. Update Lat Line
-        self.z_line_lat.set_ydata([z_center]*2)
-        self.z_line_lat.set_alpha(1) # Visible
-        
-        # 3. Blit AP (Show new box)
-        self.canvas.restore_region(self.bg_ap)
-        self.ax_ap.draw_artist(self.rect_ap_patch)
-        self.ax_ap.draw_artist(self.z_line_ap) # Keep existing line
-        self.canvas.blit(self.ax_ap.bbox)
-        
-        # 4. Blit Lat (Show new Line)
-        self.canvas.restore_region(self.bg_lat)
-        if self.rect_lat_patch: self.ax_lat.draw_artist(self.rect_lat_patch) # Keep existing box
-        self.ax_lat.draw_artist(self.z_line_lat)
-        self.canvas.blit(self.ax_lat.bbox)
-        
         self.update_coords_label()
+
+    # Selectors
+    def on_select_ap(self, eclick, erelease):
+        x1, z1 = eclick.xdata, eclick.ydata
+        x2, z2 = erelease.xdata, erelease.ydata
+        self.update_box_from_view("AP", [0, 1, 4, 5], [min(x1, x2), max(x1, x2), min(z1, z2), max(z1, z2)])
 
     def on_select_lat(self, eclick, erelease):
-        if time.time() - self.last_draw_time < 0.05: return
-        self.last_draw_time = time.time()
-        self.is_submitted = False
-        
+        y1, z1 = eclick.xdata, eclick.ydata
+        y2, z2 = erelease.xdata, erelease.ydata
+        self.update_box_from_view("Lat", [2, 3, 4, 5], [min(y1, y2), max(y1, y2), min(z1, z2), max(z1, z2)])
+
+    def on_select_axial(self, eclick, erelease):
         x1, y1 = eclick.xdata, eclick.ydata
         x2, y2 = erelease.xdata, erelease.ydata
-        z_min, z_max = min(y1, y2), max(y1, y2)
-        z_center = (z_min + z_max) / 2
+        self.update_box_from_view("Axial", [0, 1, 2, 3], [min(x1, x2), max(x1, x2), min(y1, y2), max(y1, y2)])
         
-        self.lat_box = (min(x1, x2), max(x1, x2), z_min, z_max)
+    def on_select_coronal(self, eclick, erelease):
+        x1, z1 = eclick.xdata, eclick.ydata
+        x2, z2 = erelease.xdata, erelease.ydata
+        self.update_box_from_view("Coronal", [0, 1, 4, 5], [min(x1, x2), max(x1, x2), min(z1, z2), max(z1, z2)])
         
-        # 1. Create Persistent Patch on Lat
-        if self.rect_lat_patch:
-            try: self.rect_lat_patch.remove()
-            except: pass
-        width = abs(x2 - x1)
-        height = abs(y2 - y1)
-        self.rect_lat_patch = Rectangle((min(x1, x2), min(y1, y2)), width, height,
-                                        linewidth=1, edgecolor='red', facecolor='none', animated=True)
-        self.ax_lat.add_patch(self.rect_lat_patch)
-        
-        # 2. Update AP Line
-        self.z_line_ap.set_ydata([z_center]*2)
-        self.z_line_ap.set_alpha(1) # Visible
-        
-        # 3. Blit Lat (Show new box)
-        self.canvas.restore_region(self.bg_lat)
-        self.ax_lat.draw_artist(self.rect_lat_patch)
-        self.ax_lat.draw_artist(self.z_line_lat)
-        self.canvas.blit(self.ax_lat.bbox)
-        
-        # 4. Blit AP (Show new Line)
-        self.canvas.restore_region(self.bg_ap)
-        if self.rect_ap_patch: self.ax_ap.draw_artist(self.rect_ap_patch)
-        self.ax_ap.draw_artist(self.z_line_ap)
-        self.canvas.blit(self.ax_ap.bbox)
-        
-        self.update_coords_label()
-
+    def on_select_sagittal(self, eclick, erelease):
+        y1, z1 = eclick.xdata, eclick.ydata
+        y2, z2 = erelease.xdata, erelease.ydata
+        self.update_box_from_view("Sagittal", [2, 3, 4, 5], [min(y1, y2), max(y1, y2), min(z1, z2), max(z1, z2)])
 
     def get_xyz(self):
-        if not self.ap_box or not self.lat_box: return None
-        x_min, x_max, z_min_ap, z_max_ap = self.ap_box
-        cx = (x_min + x_max) / 2
-        y_min, y_max, z_min_lat, z_max_lat = self.lat_box
-        cy = (y_min + y_max) / 2
-        cz = ((z_min_ap + z_max_ap) / 2 + (z_min_lat + z_max_lat) / 2) / 2
-        return cx, cy, cz
+        if not self.box_3d: return None
+        x1, x2, y1, y2, z1, z2 = self.box_3d
+        return (x1+x2)/2, (y1+y2)/2, (z1+z2)/2
 
     # --- MPR ---
     def visual_check(self):
-        coords = self.get_xyz()
-        if not coords:
-            messagebox.showwarning("Incomplete", "Draw boxes on both views first.")
+        # Just forces a redraw of the MPR slices based on current center
+        if not self.box_3d:
             return
 
-        cx, cy, cz = coords
+        x1, x2, y1, y2, z1, z2 = self.box_3d
+        cx, cy, cz = (x1+x2)/2, (y1+y2)/2, (z1+z2)/2
+        
         ix, iy, iz = int(cx), int(cy), int(cz)
         
         # Clamping
@@ -514,61 +466,58 @@ class TkAnnotator:
         
         dx, dy, dz = self.voxel_sizes
         
-        # Axial (Data is already filtered by apply_hu_scale)
-        self.ax_axial.clear()
-        self.ax_axial.imshow(self.data[:, :, iz].T, cmap='gray', origin='lower')
-        self.ax_axial.set_aspect(dy/dx)
-        self.ax_axial.set_title(f"Axial (Z={iz})")
-        self.ax_axial.axvline(ix, color='r', lw=0.8); self.ax_axial.axhline(iy, color='r', lw=0.8)
+        # Helper for display
+        def show_slice(ax, data, aspect, title):
+            ax.clear()
+            ax.imshow(data, cmap='gray', origin='lower')
+            ax.set_aspect(aspect)
+            ax.set_title(title)
+            
+        # Axial (XY)
+        show_slice(self.ax_axial, self.data[:, :, iz].T, dy/dx, f"Axial (Z={iz})")
+        self.rs_axial = RectangleSelector(self.ax_axial, self.on_select_axial, useblit=True, button=[1], 
+                                          minspanx=5, minspany=5, spancoords='pixels', interactive=False)
+                                          
+        # Coronal (XZ)
+        show_slice(self.ax_coronal, self.data[:, iy, :].T, dz/dx, f"Coronal (Y={iy})")
+        self.rs_coronal = RectangleSelector(self.ax_coronal, self.on_select_coronal, useblit=True, button=[1], 
+                                            minspanx=5, minspany=5, spancoords='pixels', interactive=False)
+                                            
+        # Sagittal (YZ)
+        show_slice(self.ax_sagittal, self.data[ix, :, :].T, dz/dy, f"Sagittal (X={ix})")
+        self.rs_sagittal = RectangleSelector(self.ax_sagittal, self.on_select_sagittal, useblit=True, button=[1], 
+                                             minspanx=5, minspany=5, spancoords='pixels', interactive=False)
         
-        # Coronal
-        self.ax_coronal.clear()
-        self.ax_coronal.imshow(self.data[:, iy, :].T, cmap='gray', origin='lower')
-        self.ax_coronal.set_aspect(dz/dx)
-        self.ax_coronal.set_title(f"Coronal (Y={iy})")
-        self.ax_coronal.axvline(ix, color='r', lw=0.8); self.ax_coronal.axhline(iz, color='r', lw=0.8)
-        
-        # Sagittal
-        self.ax_sagittal.clear()
-        self.ax_sagittal.imshow(self.data[ix, :, :].T, cmap='gray', origin='lower')
-        self.ax_sagittal.set_aspect(dz/dy)
-        self.ax_sagittal.set_title(f"Sagittal (X={ix})")
-        self.ax_sagittal.axvline(iy, color='r', lw=0.8); self.ax_sagittal.axhline(iz, color='r', lw=0.8)
-        
-        self.canvas.draw()
+        # Draw the boxes on top of new slices
+        self.display_annotation()
 
     def submit_annotation(self, silent=False):
         name = self.resident_name.get().strip()
         if not silent and not name:
             messagebox.showwarning("Missing Info", "Please enter Resident Name.")
             return
-        if silent and not name: return # Can't save without name
+        if silent and not name: return 
             
-        coords = self.get_xyz()
-        if not silent and not coords:
+        if not self.box_3d:
+            if silent: return
             messagebox.showwarning("Incomplete", "Draw bounding boxes first.")
             return
-        if silent and not coords: return # Nothing to save
         
-        # Prevent Double Save
-        if self.is_submitted:
-            if silent: return # Skip auto-save if already submitted
-            # If manual submit, we can just say "Already saved" or update anyway?
-            # User might want to force re-save? 
-            # Protocol: If user modifies, is_submitted is False. 
-            # So if is_submitted is True, they haven't touched it.
-            if not silent:
-                self.lbl_status.config(text=f"Already saved {LANDMARKS[self.current_landmark_idx].split('. ')[1]}!")
-                return
+        if self.is_submitted and not silent:
+             self.lbl_status.config(text=f"Already saved {LANDMARKS[self.current_landmark_idx].split('. ')[1]}!")
+             return
             
-        cx, cy, cz = coords
+        cx, cy, cz = self.get_xyz()
         lm_str = LANDMARKS[self.current_landmark_idx]
         lm_idx = lm_str.split('.')[0]
         lm_name = lm_str.split('. ')[1]
         
-        # Format Box Strings (x1;x2;z1;z2)
-        ap_str = f"{self.ap_box[0]:.1f};{self.ap_box[1]:.1f};{self.ap_box[2]:.1f};{self.ap_box[3]:.1f}"
-        lat_str = f"{self.lat_box[0]:.1f};{self.lat_box[1]:.1f};{self.lat_box[2]:.1f};{self.lat_box[3]:.1f}"
+        x1, x2, y1, y2, z1, z2 = self.box_3d
+        
+        # Legacy Format support: AP (x1, x2, z1, z2), Lat (y1, y2, z1, z2)
+        # We save the unified Z into both to keep CSV compatibility
+        ap_str = f"{x1:.1f};{x2:.1f};{z1:.1f};{z2:.1f}"
+        lat_str = f"{y1:.1f};{y2:.1f};{z1:.1f};{z2:.1f}"
         
         row = [
             self.case_id,
@@ -591,11 +540,8 @@ class TkAnnotator:
                     writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
                 writer.writerow(row)
             
-            if not silent:
-                self.lbl_status.config(text=f"Saved {lm_name}!")
-            else:
-                self.lbl_status.config(text=f"Auto-saved {lm_name}!")
-            
+            msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
+            self.lbl_status.config(text=msg)
             self.is_submitted = True
             
         except PermissionError:
@@ -616,10 +562,8 @@ class TkAnnotator:
                 header = next(reader, None)
                 if not header: return False
                 
-                # Search for latest entry matching Case, Resident, Landmark
                 for row in reader:
                     if len(row) < 10: continue
-                    # Row: CaseID, FileName, Resident, LandmarkIdx, LandmarkName, X, Y, Z, AP_Box, Lat_Box
                     r_case, _, r_name, r_lm_idx = row[0], row[1], row[2], row[3]
                     
                     if r_case == self.case_id and r_name == name and r_lm_idx == lm_idx:
@@ -627,15 +571,22 @@ class TkAnnotator:
             
             if target_row:
                 # Parse Boxes
-                # Format: x1;x2;z1;z2
                 ap_parts = [float(x) for x in target_row[8].split(';')]
                 lat_parts = [float(x) for x in target_row[9].split(';')]
                 
-                ap_box = (ap_parts[0], ap_parts[1], ap_parts[2], ap_parts[3])
-                lat_box = (lat_parts[0], lat_parts[1], lat_parts[2], lat_parts[3])
+                # Unify loading: Take X from AP, Y from Lat, Z from AP (or average)
+                x1, x2 = ap_parts[0], ap_parts[1]
+                y1, y2 = lat_parts[0], lat_parts[1]
+                z1, z2 = ap_parts[2], ap_parts[3]
                 
-                self.display_annotation(ap_box, lat_box)
+                self.box_3d = [x1, x2, y1, y2, z1, z2]
+                self.display_annotation()
+                
+                # Also trigger visual check to align slices to this loaded center
+                self.visual_check()
+                
                 self.lbl_status.config(text=f"Loaded existing: {target_row[4]}")
+                self.is_submitted = True
                 return True
                 
         except Exception as e:
@@ -643,41 +594,41 @@ class TkAnnotator:
             
         return False
 
-    def display_annotation(self, ap_box, lat_box):
-        self.clear_visuals() # Clear first, then draw new
+    def display_annotation(self):
+        x1, x2, y1, y2, z1, z2 = self.box_3d
         
-        self.ap_box = ap_box
-        self.lat_box = lat_box
+        # 1. AP (X-Z)
+        if self.rect_ap: self.rect_ap.remove()
+        self.rect_ap = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
+                                 linewidth=1, edgecolor='red', facecolor='none')
+        self.ax_ap.add_patch(self.rect_ap)
         
-        # Recreate visual elements
-        # AP Patch
-        x1, x2, z_min, z_max = ap_box
-        width = abs(x2 - x1)
-        height = abs(z_max - z_min)
-        self.rect_ap_patch = Rectangle((min(x1, x2), min(z_min, z_max)), width, height, 
-                                       linewidth=1, edgecolor='red', facecolor='none', animated=True)
-        self.ax_ap.add_patch(self.rect_ap_patch)
+        # 2. Lat (Y-Z)
+        if self.rect_lat: self.rect_lat.remove()
+        self.rect_lat = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
+                                  linewidth=1, edgecolor='red', facecolor='none')
+        self.ax_lat.add_patch(self.rect_lat)
         
-        # Lat Patch
-        x1_l, x2_l, z_min_l, z_max_l = lat_box
-        width_l = abs(x2_l - x1_l)
-        height_l = abs(z_max_l - z_min_l)
-        self.rect_lat_patch = Rectangle((min(x1_l, x2_l), min(z_min_l, z_max_l)), width_l, height_l,
-                                        linewidth=1, edgecolor='red', facecolor='none', animated=True)
-        self.ax_lat.add_patch(self.rect_lat_patch)
+        # 3. Axial (X-Y)
+        if self.rect_axial: self.rect_axial.remove()
+        self.rect_axial = Rectangle((min(x1, x2), min(y1, y2)), abs(x2-x1), abs(y2-y1),
+                                    linewidth=1, edgecolor='red', facecolor='none')
+        self.ax_axial.add_patch(self.rect_axial)
         
-        # Z-Lines
-        z_center = (z_min + z_max) / 2 # Using AP Z for consistency, they should align
-        self.z_line_lat.set_ydata([z_center]*2)
-        self.z_line_lat.set_alpha(1)
+        # 4. Coronal (X-Z)
+        if self.rect_coronal: self.rect_coronal.remove()
+        self.rect_coronal = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
+                                      linewidth=1, edgecolor='red', facecolor='none')
+        self.ax_coronal.add_patch(self.rect_coronal)
         
-        self.z_line_ap.set_ydata([z_center]*2)
-        self.z_line_ap.set_alpha(1)
+        # 5. Sagittal (Y-Z)
+        if self.rect_sagittal: self.rect_sagittal.remove()
+        self.rect_sagittal = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
+                                       linewidth=1, edgecolor='red', facecolor='none')
+        self.ax_sagittal.add_patch(self.rect_sagittal)
         
-        self.canvas.draw()
-        self.is_submitted = True # Mark as "clean"
-        self.update_coords_label()
-
+        self.canvas.draw()    
+        
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -688,7 +639,6 @@ if __name__ == "__main__":
     if not os.path.exists(data_dir): os.makedirs(data_dir, exist_ok=True)
     
     root = tk.Tk()
-    # Use a nice theme if available
     style = ttk.Style()
     if 'clam' in style.theme_names():
         style.theme_use('clam')
