@@ -1,6 +1,6 @@
 # 3D CT Annotator 🦴
 
-An annotation tool for localizaing landmarks on CT scans. A user is given two views (AP and Lateral), and asked to add bounding boxes over regions of interest (ROI) in both views. As the views are orthoogonal, we can exactly localize the ROIs in 3D 💀🎯
+An annotation tool for localizing landmarks on CT scans. The tool provides a synchronized MULTI-VIEW environment. Users draw bounding boxes on AP and Lateral views, which are automatically projected into 3D space and visualized on axial, coronal, and sagittal MPR views.
 
 ![Annotator Overview](./assets/overview.png)
 
@@ -40,22 +40,23 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
     ```bash
     python src/annotator.py
     ```
+    The application will automatically maximize to fill your screen.
 
 2.  **Login**:
     - Enter your **Resident Name** in the "User Info" box. This is required to save data.
 
 3.  **Annotate**:
     - Select a landmark from the dropdown or use the **Next LM** button.
-    - **AP View**: Click and drag to draw a bounding box around the landmark.
-    - **Lateral View**: Draw the corresponding box.
-    - *Tip: A cyan line will appear to help you align the Z-height between views.*
+    - **AP/Lateral Views**: Click and drag to draw a bounding box. 
+    - **Interactive MPR**: As soon as you draw a box, the MPR views (Bottom Row) will automatically populate with the specific slice centered on your selection.
+    - **Refine**: You can adjust the bounding box on **ANY** of the 5 views (AP, Lat, Axial, Coronal, Sagittal). Changes are synchronized instantly across all views.
 
-4.  **Verify**:
-    - Click **Visual Check (MPR)** to see the cross-sectional views of your selection.
+4.  **HU Filtering**:
+    - Use the "CT HU Scale" dropdown to change contrast (e.g., Bone vs Soft Tissue). This updates all views without losing your current selection context.
 
 5.  **Save & Continue**:
     - Click **Next LM** (or **Next Case**) to auto-save your current annotation and move to the next item.
-    - If you need to fix a mistake, simply navigate back (`< Prev LM`), redraw the box, and it will update the record.
+    - Navigating to a new case/landmark resets the views to a clean state.
 
 ## Output
 
@@ -70,4 +71,4 @@ Annotations are saved to `annotations.csv` in the project root.
      - *Note: Y-axis corresponds to the horizontal axis in the Lateral view.*
 
 ---
-**Note**: The application uses an "Append-Only" log for safety. If you modify an annotation, a new row is added to the CSV.
+**Note**: The application uses an "Append-Only" log for safety. If you modify an annotation, a new row is added to the CSV to preserve history.
