@@ -40,7 +40,7 @@ class TkAnnotator:
     def __init__(self, root, data_dir):
         self.root = root
         self.root.title("3D CT Annotator")
-        self.root.geometry("1600x900")
+        self.root.state("zoomed") # Maximized window
         
         self.data_dir = data_dir
         self.file_list = [f for f in os.listdir(data_dir) if f.endswith('.nii.gz')]
@@ -201,6 +201,9 @@ class TkAnnotator:
         
         self.fig.tight_layout()
         
+        # Instructions Panel (Bottom) - Pack FIRST so it's always visible
+        self.setup_instructions()
+
         # Canvas Widget
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.frame_canvas)
         self.canvas.draw()
@@ -213,10 +216,7 @@ class TkAnnotator:
         # Blitting Backgrounds
         self.bg_ap = None
         self.bg_lat = None
-        self.canvas.mpl_connect('draw_event', self.on_draw) 
-
-        # Instructions Panel (Bottom)
-        self.setup_instructions()
+        self.canvas.mpl_connect('draw_event', self.on_draw)
 
     def setup_instructions(self):
         # Styled Protocol Frame
