@@ -40,10 +40,11 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
     ```bash
     python src/annotator.py
     ```
-    The application will automatically maximize to fill your screen.
-
-2.  **Login**:
-    - Enter your **Resident Name** in the "User Info" box. This is required to save data.
+    
+2.  **Login & Welcome**:
+    - A **Welcome Window** will appear first.
+    - Read the study instructions and enter your **Full Name**.
+    - Click **Start Annotation** to launch the main tool.
 
 3.  **Annotate**:
     - Select a landmark from the dropdown or use the **Next LM** button.
@@ -51,16 +52,25 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
     - **Interactive MPR**: As soon as you draw a box, the MPR views (Bottom Row) will automatically populate with the specific slice centered on your selection.
     - **Refine**: You can adjust the bounding box on **ANY** of the 5 views (AP, Lat, Axial, Coronal, Sagittal). Changes are synchronized instantly across all views.
 
-4.  **HU Filtering**:
-    - Use the "CT HU Scale" dropdown to change contrast (e.g., Bone vs Soft Tissue). This updates all views without losing your current selection context.
-
-5.  **Save & Continue**:
+4.  **Save & Continue**:
     - Click **Next LM** (or **Next Case**) to auto-save your current annotation and move to the next item.
     - Navigating to a new case/landmark resets the views to a clean state.
 
+5. **Optional**: 
+    - Use the "CT HU Scale" dropdown to change contrast (e.g., Bone vs Soft Tissue). This updates all views without losing your current selection context.
+    - Click the **Help / Instructions** button at the bottom left at any time to review the study protocol.
+
 ## Output
 
-Annotations are saved to `annotations.csv` in the project root.
+Annotations are automatically saved in the `annotations/` directory.
+
+```
+3D-annotator/
+├── annotations/
+│   ├── annotations.csv          <-- Consolidated log of all users
+│   ├── <Resident Name>_annotations.csv <-- Individual backup for <Resident Name>
+│   └── ...
+```
 
 **Format**:
 `CaseID, FileName, Resident, LandmarkIdx, LandmarkName, X, Y, Z, AP_Box, Lat_Box`
