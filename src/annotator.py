@@ -657,10 +657,10 @@ class TkAnnotator:
                 z1, z2 = ap_parts[2], ap_parts[3]
                 
                 self.box_3d = [x1, x2, y1, y2, z1, z2]
-                self.display_annotation()
                 
-                # Also trigger visual check to align slices to this loaded center
-                self.visual_check()
+                # Critical: Ensure base images are drawn before overlaying box
+                self.display_base_images() 
+                # Note: display_base_images calls visual_check if box_3d is set, so we don't need to call it again here
                 
                 self.lbl_status.config(text=f"Loaded existing: {target_row[4]}")
                 self.is_submitted = True
