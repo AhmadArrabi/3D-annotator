@@ -34,7 +34,8 @@ HU_SCALES = {
     "Bone (Soft)": 150, 
     "Bone (Hard)": 350
 }
-OUTPUT_CSV = "annotations.csv"
+ANNOT_DIR = "annotations"
+OUTPUT_CSV = os.path.join(ANNOT_DIR, "annotations.csv")
 
 STUDY_INSTRUCTIONS = (
     "Thank you for participating in this study.\n\n"
@@ -709,6 +710,7 @@ if __name__ == "__main__":
 
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
     if not os.path.exists(data_dir): os.makedirs(data_dir, exist_ok=True)
+    if not os.path.exists(ANNOT_DIR): os.makedirs(ANNOT_DIR, exist_ok=True)
     
     root = tk.Tk()
     
