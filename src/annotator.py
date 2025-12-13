@@ -596,19 +596,33 @@ class TkAnnotator:
         ]
         
         try:
-            write_header = not os.path.exists(OUTPUT_CSV)
-            with open(OUTPUT_CSV, 'a', newline='') as f:
-                writer = csv.writer(f)
-                if write_header:
-                    writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
-                writer.writerow(row)
+            # Prepare targets: Main CSV + User-Specific CSV
+            targets = [OUTPUT_CSV]
+            
+            # Create sanitized filename from resident name
+            safe_name = "".join([c for c in name if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
+            if safe_name:
+                user_csv = os.path.join(ANNOT_DIR, f"{safe_name}_annotations.csv")
+                if user_csv != OUTPUT_CSV:
+                    targets.append(user_csv)
+            
+            # Write to all targets
+            for fname in targets:
+                write_header = not os.path.exists(fname)
+                with open(fname, 'a', newline='') as f:
+                    writer = csv.writer(f)
+                    if write_header:
+                        writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
+                    writer.writerow(row)
             
             msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
             self.lbl_status.config(text=msg)
             self.is_submitted = True
             
         except PermissionError:
-            if not silent: messagebox.showerror("Error", "CSV file is open. Close it and retry.")
+            if not silent: messagebox.showerror("Error", "A CSV file is open. Please close it and retry.")
+        except Exception as e:
+            if not silent and not "Permission" in str(e): messagebox.showerror("Error", f"Save failed: {e}")
 
     def load_existing_annotation(self):
         if not os.path.exists(OUTPUT_CSV): return False
