@@ -34,7 +34,8 @@ HU_SCALES = {
     "Bone (Soft)": 150, 
     "Bone (Hard)": 350
 }
-OUTPUT_CSV = "annotations.csv"
+ANNOT_DIR = "annotations"
+OUTPUT_CSV = os.path.join(ANNOT_DIR, "annotations.csv")
 
 STUDY_INSTRUCTIONS = (
     "Thank you for participating in this study.\n\n"
@@ -595,19 +596,33 @@ class TkAnnotator:
         ]
         
         try:
-            write_header = not os.path.exists(OUTPUT_CSV)
-            with open(OUTPUT_CSV, 'a', newline='') as f:
-                writer = csv.writer(f)
-                if write_header:
-                    writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
-                writer.writerow(row)
+            # Prepare targets: Main CSV + User-Specific CSV
+            targets = [OUTPUT_CSV]
+            
+            # Create sanitized filename from resident name
+            safe_name = "".join([c for c in name if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
+            if safe_name:
+                user_csv = os.path.join(ANNOT_DIR, f"{safe_name}_annotations.csv")
+                if user_csv != OUTPUT_CSV:
+                    targets.append(user_csv)
+            
+            # Write to all targets
+            for fname in targets:
+                write_header = not os.path.exists(fname)
+                with open(fname, 'a', newline='') as f:
+                    writer = csv.writer(f)
+                    if write_header:
+                        writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
+                    writer.writerow(row)
             
             msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
             self.lbl_status.config(text=msg)
             self.is_submitted = True
             
         except PermissionError:
-            if not silent: messagebox.showerror("Error", "CSV file is open. Close it and retry.")
+            if not silent: messagebox.showerror("Error", "A CSV file is open. Please close it and retry.")
+        except Exception as e:
+            if not silent and not "Permission" in str(e): messagebox.showerror("Error", f"Save failed: {e}")
 
     def load_existing_annotation(self):
         if not os.path.exists(OUTPUT_CSV): return False
@@ -642,10 +657,10 @@ class TkAnnotator:
                 z1, z2 = ap_parts[2], ap_parts[3]
                 
                 self.box_3d = [x1, x2, y1, y2, z1, z2]
-                self.display_annotation()
                 
-                # Also trigger visual check to align slices to this loaded center
-                self.visual_check()
+                # Critical: Ensure base images are drawn before overlaying box
+                self.display_base_images() 
+                # Note: display_base_images calls visual_check if box_3d is set, so we don't need to call it again here
                 
                 self.lbl_status.config(text=f"Loaded existing: {target_row[4]}")
                 self.is_submitted = True
@@ -709,6 +724,7 @@ if __name__ == "__main__":
 
     data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
     if not os.path.exists(data_dir): os.makedirs(data_dir, exist_ok=True)
+    if not os.path.exists(ANNOT_DIR): os.makedirs(ANNOT_DIR, exist_ok=True)
     
     root = tk.Tk()
     
