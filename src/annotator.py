@@ -36,97 +36,156 @@ HU_SCALES = {
 }
 OUTPUT_CSV = "annotations.csv"
 
+STUDY_INSTRUCTIONS = (
+    "Thank you for participating in this study.\n\n"
+    "Goal: To create a high-quality dataset of anatomical landmarks.\n\n"
+    "Instructions:\n"
+    "1. You will be presented with a series of CT cases.\n"
+    "2. For each case, locate the requested landmarks.\n"
+    "3. Draw bounding boxes on the AP and Lateral views.\n"
+    "4. Use the MPR views to refine your selection.\n"
+    "5. Press 'Next' to save and proceed."
+)
+
+# --- Login Dialog ---
+class LoginDialog:
+    def __init__(self, parent):
+        self.parent = parent
+        self.result_name = None
+        
+        # Setup Window
+        self.top = tk.Toplevel(parent)
+        self.top.title("Welcome - 3D CT Annotator Study")
+        self.top.geometry("600x600")
+        self.top.resizable(True, True)
+        self.top.lift()
+        self.top.focus_force()
+        # Modality handled by wait_window
+
+        # Styling
+        style = ttk.Style()
+        style.configure("Title.TLabel", font=("Segoe UI", 16, "bold"))
+        style.configure("Body.TLabel", font=("Segoe UI", 11))
+        
+        # Content
+        ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        
+        ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        
+        lbl_info = ttk.Label(self.top, text=STUDY_INSTRUCTIONS, style="Body.TLabel", wraplength=450, justify="left")
+        lbl_info.pack(pady=10, padx=20)
+        
+        # Input
+        input_frame = ttk.Frame(self.top)
+        input_frame.pack(pady=30, fill=tk.X, padx=50)
+        
+        ttk.Label(input_frame, text="Please enter your Full Name:", style="Body.TLabel").pack(anchor=tk.W)
+        self.ent_name = ttk.Entry(input_frame, font=("Segoe UI", 16))
+        self.ent_name.pack(fill=tk.X, pady=10, ipady=5)
+        self.ent_name.bind("<Return>", self.on_submit)
+        
+        # Submit
+        btn_start = ttk.Button(self.top, text="Start Annotation", command=self.on_submit, width=20)
+        btn_start.pack(pady=10)
+        
+        # Protocol to handle 'X' close
+        self.top.protocol("WM_DELETE_WINDOW", self.on_close)
+        
+        # Wait
+        self.parent.wait_window(self.top)
+
+    def on_submit(self, event=None):
+        name = self.ent_name.get().strip()
+        if not name:
+            messagebox.showwarning("Required", "Please enter your name to proceed.")
+            return
+        self.result_name = name
+        self.top.destroy()
+        
+    def on_close(self):
+        self.top.destroy()
+
+
 class TkAnnotator:
-    def __init__(self, root, data_dir):
+    def __init__(self, root, data_dir, resident_name):
         self.root = root
         self.root.title("3D CT Annotator")
         self.root.state("zoomed") # Maximized window
         
         self.data_dir = data_dir
-        self.file_list = [f for f in os.listdir(data_dir) if f.endswith('.nii.gz')]
+        self.file_list = sorted([f for f in os.listdir(data_dir) if f.endswith('.nii.gz')])
         if not self.file_list:
-            messagebox.showerror("Error", "No .nii.gz files found in data directory.")
+            messagebox.showerror("Error", "No .nii.gz files found in data directory!")
             sys.exit(1)
             
         # State
         self.case_index = 0
-        self.current_landmark_idx = 0
-        self.resident_name = tk.StringVar(value="")
+        self.resident_name = tk.StringVar(value=resident_name)
         self.case_id_search = tk.StringVar()
         
-        # Data Placeholders
-        self.img = None
-        self.data = None
-        self.raw_data = None
-        self.voxel_sizes = None
-        self.case_id = ""
-        self.ap_view = None
-        self.lat_view = None
+        self.current_landmark_idx = 0
+        self.is_submitted = False
         self.hu_scale = "Default"
         
         # Annotation State
-        # Annotation State
         self.box_3d = None # [x1, x2, y1, y2, z1, z2]
         
-        # Patches
+        # Visual Elements State
         self.rect_ap = None
         self.rect_lat = None
         self.rect_axial = None
         self.rect_coronal = None
         self.rect_sagittal = None
         
-        self.last_draw_time = 0
-        self.is_submitted = False
-        
-        # --- UI Setup ---
         self.setup_theme()
         self.setup_layout()
         self.setup_controls()
         self.setup_canvas()
         
-        # Load First Case
+        # Load first case
         self.load_case(0)
 
     def setup_theme(self):
         style = ttk.Style()
         style.theme_use('clam')
         
-        # 1. Larger Fonts & Aesthetics
-        default_font = ("Segoe UI", 11)
-        header_font = ("Segoe UI", 12, "bold")
-        big_label_font = ("Segoe UI", 14, "bold")
+        # Modern Palette
+        BG_COLOR = "#f0f0f0"
+        ACCENT_COLOR = "#0078d7"
         
-        style.configure(".", font=default_font)
-        style.configure("TLabel", font=default_font)
-        style.configure("TButton", font=default_font, padding=5)
-        style.configure("TLabelFrame.Label", font=header_font, foreground="#007ACC")
-        style.configure("Big.TLabel", font=big_label_font, foreground="blue")
+        style.configure(".", background=BG_COLOR, font=("Segoe UI", 10))
+        style.configure("TLabel", background=BG_COLOR)
+        style.configure("TButton", padding=6, relief="flat", background="#e1e1e1")
+        style.map("TButton", background=[("active", "#cce4f7")])
+        style.configure("Big.TLabel", font=("Segoe UI", 14, "bold"), foreground=ACCENT_COLOR)
 
     def setup_layout(self):
-        # Main Container
-        self.paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        # Main container
+        self.main_frame = ttk.Frame(self.root)
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Paned Window (Left Controls, Right Canvas)
+        self.paned = ttk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
         
-        # Left Panel (Controls)
-        self.frame_controls = ttk.Frame(self.paned, padding=15, width=350) 
-        self.paned.add(self.frame_controls, weight=0)
+        # 1. Controls Panel
+        self.frame_controls = ttk.Frame(self.paned, padding=20, width=350)
+        self.paned.add(self.frame_controls, weight=0) # Fixed width
         
-        # Right Panel (Canvas)
+        # 2. Canvas Panel
         self.frame_canvas = ttk.Frame(self.paned, padding=5)
         self.paned.add(self.frame_canvas, weight=1)
 
     def setup_controls(self):
+        # Greeting
+        greeting = f"Hi, {self.resident_name.get()}"
+        ttk.Label(self.frame_controls, text=greeting, font=("Segoe UI", 12, "bold"), foreground="gray").pack(anchor=tk.W, pady=(0, 10))
+
         # 2. Prominent Current Landmark Display
         self.lbl_current_lm = ttk.Label(self.frame_controls, text="Initial Landmark", style="Big.TLabel", wraplength=330)
         self.lbl_current_lm.pack(fill=tk.X, pady=(0, 20))
         
-        # User Info
-        info_group = ttk.LabelFrame(self.frame_controls, text="User Info", padding=10)
-        info_group.pack(fill=tk.X, pady=10)
-        
-        ttk.Label(info_group, text="Resident Full Name:").pack(anchor=tk.W)
-        self.ent_name = ttk.Entry(info_group, textvariable=self.resident_name)
-        self.ent_name.pack(fill=tk.X, pady=5)
+        # User Info Removed (Handled by Login)
         
         # Navigation
         nav_group = ttk.LabelFrame(self.frame_controls, text="Patient Navigation", padding=10)
@@ -182,6 +241,9 @@ class TkAnnotator:
         
         self.lbl_status = ttk.Label(self.frame_controls, text="", foreground="green")
         self.lbl_status.pack(pady=10)
+        
+        # Help Button
+        ttk.Button(self.frame_controls, text="Help / Instructions", command=self.show_help).pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
     def setup_canvas(self):
         # Matplotlib Figure
@@ -629,6 +691,16 @@ class TkAnnotator:
         
         self.canvas.draw()    
         
+    def show_help(self):
+        root = tk.Toplevel(self.root)
+        root.title("Instructions")
+        root.geometry("500x400")
+        
+        ttk.Label(root, text="Instructions", font=("Segoe UI", 14, "bold")).pack(pady=15)
+        ttk.Label(root, text=STUDY_INSTRUCTIONS, wraplength=450, justify="left").pack(padx=20, pady=10)
+        
+        ttk.Button(root, text="Close", command=root.destroy).pack(pady=20)
+        
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -639,11 +711,23 @@ if __name__ == "__main__":
     if not os.path.exists(data_dir): os.makedirs(data_dir, exist_ok=True)
     
     root = tk.Tk()
-    style = ttk.Style()
-    if 'clam' in style.theme_names():
-        style.theme_use('clam')
+    
+    # 1. Hide Root initially
+    root.withdraw()
+    
+    # 2. Show Login Dialog
+    login = LoginDialog(root)
+    
+    # 3. Check Result
+    if not login.result_name:
+        root.destroy()
+        sys.exit(0)
         
-    app = TkAnnotator(root, data_dir)
+    # 4. Success - Setup Main App
+    root.deiconify()
+    # root.state("zoomed") is handled in TkAnnotator.__init__
+    
+    app = TkAnnotator(root, data_dir, resident_name=login.result_name)
     
     if args.test:
         print("Setup GUI complete in test mode.")
