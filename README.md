@@ -62,6 +62,7 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
 
 ## Output
 
+### Annotations
 Annotations are automatically saved in the `annotations/` directory.
 
 ```
@@ -79,6 +80,23 @@ Annotations are automatically saved in the `annotations/` directory.
 - **AP_Box**: `x_min;x_max;z_min;z_max` (Volume X-axis and Z-axis).
 - **Lat_Box**: `y_min;y_max;z_min;z_max` (Volume Y-axis and Z-axis).
      - *Note: Y-axis corresponds to the horizontal axis in the Lateral view.*
+
+
+### Statistics
+The tool tracks behavioral statistics for each user's performance. Statistics are automatically saved every time user submits an annotation, i.e., clicks the "Next LM", "Next Case" or "Submit" button. The tracked metrics are:
+
+- **Duration**: Time taken to complete each landmark annotation.
+- **Clicks**: Number of clicks made to complete each landmark annotation.
+- **Help Used**: Number of times the user requested help.
+
+The statistics are saved in the `statistics/` directory as follows:
+
+```
+3D-annotator/
+├── statistics/
+│   ├── <Resident Name>_statistics.csv
+│   └── ...
+```
 
 ---
 **Note**: The application uses an "Append-Only" log for safety. If you modify an annotation, a new row is added to the CSV to preserve history.
