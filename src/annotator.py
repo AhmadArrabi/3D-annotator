@@ -126,13 +126,15 @@ class TkAnnotator:
         if not os.path.exists(self.stats_dir): os.makedirs(self.stats_dir, exist_ok=True)
         
         # Init Session Log
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Timestamp removed from filename to allow appending to single user file
         safe_name = "".join([c for c in resident_name if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
-        self.session_log = os.path.join(self.stats_dir, f"{safe_name}_{timestamp}.csv")
+        self.session_log = os.path.join(self.stats_dir, f"{safe_name}_statistics.csv")
         
-        with open(self.session_log, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['CaseID', 'Landmark', 'Duration_Sec', 'Clicks', 'Help_Used', 'Timestamp'])
+        # Only write header if file doesn't exist
+        if not os.path.exists(self.session_log):
+            with open(self.session_log, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['CaseID', 'Landmark', 'Duration_Sec', 'Clicks', 'Help_Used', 'Timestamp'])
             
         self.stat_start_time = datetime.now()
         self.stat_clicks = 0
