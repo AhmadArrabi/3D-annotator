@@ -256,7 +256,7 @@ class TkAnnotator:
         action_group.pack(fill=tk.X, pady=20)
         
         # Trigger removed: Visual Check is now automatic
-        btn_submit = ttk.Button(action_group, text="Submit Annotation", command=self.submit_annotation)
+        btn_submit = ttk.Button(action_group, text="Submit Annotation", command=self.submit_manual)
         btn_submit.pack(fill=tk.X, pady=5)
         
         self.lbl_status = ttk.Label(self.frame_controls, text="", foreground="green")
@@ -606,6 +606,13 @@ class TkAnnotator:
         
         # Draw the boxes on top of new slices
         self.display_annotation()
+        
+    def submit_manual(self):
+        was_submitted = self.is_submitted
+        self.submit_annotation()
+        if not was_submitted and self.is_submitted:
+            self.log_statistics()
+            self.lbl_status.config(text=self.lbl_status.cget("text") + " (Stats Logged)")
 
     def submit_annotation(self, silent=False):
         name = self.resident_name.get().strip()
