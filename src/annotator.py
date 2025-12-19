@@ -11,6 +11,7 @@ from matplotlib.figure import Figure
 from matplotlib.widgets import RectangleSelector
 from matplotlib.patches import Rectangle
 import matplotlib.gridspec as gridspec
+from datetime import datetime
 
 # --- Constants ---
 LANDMARKS = [
@@ -36,6 +37,7 @@ HU_SCALES = {
 }
 ANNOT_DIR = "annotations"
 OUTPUT_CSV = os.path.join(ANNOT_DIR, "annotations.csv")
+STATS_DIR = "statistics"
 
 STUDY_INSTRUCTIONS = (
     "Thank you for participating in this study.\n\n"
@@ -118,6 +120,25 @@ class TkAnnotator:
         if not self.file_list:
             messagebox.showerror("Error", "No .nii.gz files found in data directory!")
             sys.exit(1)
+            
+        # Stats Setup
+        self.stats_dir = STATS_DIR
+        if not os.path.exists(self.stats_dir): os.makedirs(self.stats_dir, exist_ok=True)
+        
+        # Init Session Log
+        # Timestamp removed from filename to allow appending to single user file
+        safe_name = "".join([c for c in resident_name if c.isalnum() or c in (' ', '_', '-')]).strip().replace(' ', '_')
+        self.session_log = os.path.join(self.stats_dir, f"{safe_name}_statistics.csv")
+        
+        # Only write header if file doesn't exist
+        if not os.path.exists(self.session_log):
+            with open(self.session_log, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['CaseID', 'Landmark', 'Duration_Sec', 'Clicks', 'Help_Used', 'Timestamp'])
+            
+        self.stat_start_time = datetime.now()
+        self.stat_clicks = 0
+        self.stat_help_count = 0
             
         # State
         self.case_index = 0
@@ -237,7 +258,7 @@ class TkAnnotator:
         action_group.pack(fill=tk.X, pady=20)
         
         # Trigger removed: Visual Check is now automatic
-        btn_submit = ttk.Button(action_group, text="Submit Annotation", command=self.submit_annotation)
+        btn_submit = ttk.Button(action_group, text="Submit Annotation", command=self.submit_manual)
         btn_submit.pack(fill=tk.X, pady=5)
         
         self.lbl_status = ttk.Label(self.frame_controls, text="", foreground="green")
@@ -281,6 +302,7 @@ class TkAnnotator:
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
         self.canvas.mpl_connect('draw_event', self.on_draw) 
+        self.canvas.mpl_connect('button_press_event', self.on_stat_click)
 
     def setup_instructions_overlay(self):
         # Styled Protocol Frame
@@ -328,13 +350,44 @@ class TkAnnotator:
         # Initial Display
         self.on_landmark_change(None)
 
+    def log_statistics(self):
+        try:
+            duration = (datetime.now() - self.stat_start_time).total_seconds()
+            lm_name = LANDMARKS[self.current_landmark_idx]
+            
+            row = [
+                self.case_id,
+                lm_name,
+                f"{duration:.2f}",
+                self.stat_clicks,
+                self.stat_help_count,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ]
+            
+            with open(self.session_log, 'a', newline='') as f:
+                csv.writer(f).writerow(row)
+                
+            # Reset
+            self.stat_start_time = datetime.now()
+            self.stat_clicks = 0
+            self.stat_help_count = 0
+            
+        except Exception as e:
+            print(f"Stats error: {e}")
+
+    def on_stat_click(self, event):
+        if event.inaxes:
+            self.stat_clicks += 1
+
     # --- Callbacks ---
     def prev_case(self): 
         self.submit_annotation(silent=True) # Auto-save
+        self.log_statistics()
         self.load_case(self.case_index - 1)
 
     def next_case(self): 
         self.submit_annotation(silent=True) # Auto-save
+        self.log_statistics()
         self.load_case(self.case_index + 1)
     
     def goto_case(self):
@@ -377,6 +430,7 @@ class TkAnnotator:
     def prev_landmark(self):
         try:
             self.submit_annotation(silent=True)
+            self.log_statistics()
         except Exception as e:
             print(f"Auto-save error: {e}")
         
@@ -387,6 +441,7 @@ class TkAnnotator:
     def next_landmark(self):
         try:
             self.submit_annotation(silent=True)
+            self.log_statistics()
         except Exception as e:
             print(f"Auto-save error: {e}")
             
@@ -553,6 +608,13 @@ class TkAnnotator:
         
         # Draw the boxes on top of new slices
         self.display_annotation()
+        
+    def submit_manual(self):
+        was_submitted = self.is_submitted
+        self.submit_annotation()
+        if not was_submitted and self.is_submitted:
+            self.log_statistics()
+            self.lbl_status.config(text=self.lbl_status.cget("text") + " (Stats Logged)")
 
     def submit_annotation(self, silent=False):
         name = self.resident_name.get().strip()
@@ -707,6 +769,7 @@ class TkAnnotator:
         self.canvas.draw()    
         
     def show_help(self):
+        self.stat_help_count += 1
         root = tk.Toplevel(self.root)
         root.title("Instructions")
         root.geometry("500x400")
