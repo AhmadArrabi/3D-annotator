@@ -669,8 +669,33 @@ class TkAnnotator:
                 if user_csv != OUTPUT_CSV:
                     targets.append(user_csv)
             
+            # Check for duplicates before saving
+            def is_duplicate(fname, new_row):
+                if not os.path.exists(fname): return False
+                try:
+                    with open(fname, 'r') as f:
+                        rows = list(csv.reader(f))
+                        if not rows: return False
+                        # Filter for this user/case/landmark
+                        # row: CaseID, FileName, Resident, LandmarkIdx, LandmarkName, X, Y, Z, AP, Lat
+                        # We match CaseID(0), Resident(2), LandmarkIdx(3)
+                        matching = [r for r in rows if len(r)>9 and r[0]==new_row[0] and r[2]==new_row[2] and r[3]==new_row[3]]
+                        if not matching: return False
+                        
+                        last_entry = matching[-1]
+                        # Compare critical data: CX, CY, CZ, AP_Box, Lat_Box (Indices 5-9)
+                        # We use strict string comparison since we just formatted the new_row
+                        return last_entry[5:] == new_row[5:]
+                except:
+                    return False
+
             # Write to all targets
             for fname in targets:
+                # If identical to last saved, skip
+                if is_duplicate(fname, row):
+                    print(f"Skipping duplicate for {fname}")
+                    continue
+
                 write_header = not os.path.exists(fname)
                 with open(fname, 'a', newline='') as f:
                     writer = csv.writer(f)
