@@ -641,8 +641,9 @@ class TkAnnotator:
         
         # Legacy Format support: AP (x1, x2, z1, z2), Lat (y1, y2, z1, z2)
         # We save the unified Z into both to keep CSV compatibility
-        ap_str = f"{x1:.1f};{x2:.1f};{z1:.1f};{z2:.1f}"
-        lat_str = f"{y1:.1f};{y2:.1f};{z1:.1f};{z2:.1f}"
+        # Saving with high precision (.6f) to avoid rounding drift
+        ap_str = f"{x1:.6f};{x2:.6f};{z1:.6f};{z2:.6f}"
+        lat_str = f"{y1:.6f};{y2:.6f};{z1:.6f};{z2:.6f}"
         
         row = [
             self.case_id,
@@ -650,9 +651,9 @@ class TkAnnotator:
             name,
             lm_idx,
             lm_name,
-            f"{cx:.2f}",
-            f"{cy:.2f}",
-            f"{cz:.2f}",
+            f"{cx:.6f}",
+            f"{cy:.6f}",
+            f"{cz:.6f}",
             ap_str,
             lat_str
         ]
@@ -668,8 +669,33 @@ class TkAnnotator:
                 if user_csv != OUTPUT_CSV:
                     targets.append(user_csv)
             
+            # Check for duplicates before saving
+            def is_duplicate(fname, new_row):
+                if not os.path.exists(fname): return False
+                try:
+                    with open(fname, 'r') as f:
+                        rows = list(csv.reader(f))
+                        if not rows: return False
+                        # Filter for this user/case/landmark
+                        # row: CaseID, FileName, Resident, LandmarkIdx, LandmarkName, X, Y, Z, AP, Lat
+                        # We match CaseID(0), Resident(2), LandmarkIdx(3)
+                        matching = [r for r in rows if len(r)>9 and r[0]==new_row[0] and r[2]==new_row[2] and r[3]==new_row[3]]
+                        if not matching: return False
+                        
+                        last_entry = matching[-1]
+                        # Compare critical data: CX, CY, CZ, AP_Box, Lat_Box (Indices 5-9)
+                        # We use strict string comparison since we just formatted the new_row
+                        return last_entry[5:] == new_row[5:]
+                except:
+                    return False
+
             # Write to all targets
             for fname in targets:
+                # If identical to last saved, skip
+                if is_duplicate(fname, row):
+                    print(f"Skipping duplicate for {fname}")
+                    continue
+
                 write_header = not os.path.exists(fname)
                 with open(fname, 'a', newline='') as f:
                     writer = csv.writer(f)
@@ -736,32 +762,40 @@ class TkAnnotator:
     def display_annotation(self):
         x1, x2, y1, y2, z1, z2 = self.box_3d
         
+        # Helper for safe removal
+        def safe_remove(rect, ax):
+            if rect:
+                try:
+                    rect.remove()
+                except Exception:
+                    pass # Already removed or invalid
+                    
         # 1. AP (X-Z)
-        if self.rect_ap: self.rect_ap.remove()
+        safe_remove(self.rect_ap, self.ax_ap)
         self.rect_ap = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
                                  linewidth=1, edgecolor='red', facecolor='none')
         self.ax_ap.add_patch(self.rect_ap)
         
         # 2. Lat (Y-Z)
-        if self.rect_lat: self.rect_lat.remove()
+        safe_remove(self.rect_lat, self.ax_lat)
         self.rect_lat = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
                                   linewidth=1, edgecolor='red', facecolor='none')
         self.ax_lat.add_patch(self.rect_lat)
         
         # 3. Axial (X-Y)
-        if self.rect_axial: self.rect_axial.remove()
+        safe_remove(self.rect_axial, self.ax_axial)
         self.rect_axial = Rectangle((min(x1, x2), min(y1, y2)), abs(x2-x1), abs(y2-y1),
                                     linewidth=1, edgecolor='red', facecolor='none')
         self.ax_axial.add_patch(self.rect_axial)
         
         # 4. Coronal (X-Z)
-        if self.rect_coronal: self.rect_coronal.remove()
+        safe_remove(self.rect_coronal, self.ax_coronal)
         self.rect_coronal = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
                                       linewidth=1, edgecolor='red', facecolor='none')
         self.ax_coronal.add_patch(self.rect_coronal)
         
         # 5. Sagittal (Y-Z)
-        if self.rect_sagittal: self.rect_sagittal.remove()
+        safe_remove(self.rect_sagittal, self.ax_sagittal)
         self.rect_sagittal = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
                                        linewidth=1, edgecolor='red', facecolor='none')
         self.ax_sagittal.add_patch(self.rect_sagittal)

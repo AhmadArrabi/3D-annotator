@@ -1,4 +1,3 @@
-numpy
-matplotlib
-nibabel
-tkinter
+matplotlib==3.10.8
+nibabel==5.3.3
+numpy==2.4.0
