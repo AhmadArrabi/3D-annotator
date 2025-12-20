@@ -736,32 +736,40 @@ class TkAnnotator:
     def display_annotation(self):
         x1, x2, y1, y2, z1, z2 = self.box_3d
         
+        # Helper for safe removal
+        def safe_remove(rect, ax):
+            if rect:
+                try:
+                    rect.remove()
+                except Exception:
+                    pass # Already removed or invalid
+                    
         # 1. AP (X-Z)
-        if self.rect_ap: self.rect_ap.remove()
+        safe_remove(self.rect_ap, self.ax_ap)
         self.rect_ap = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
                                  linewidth=1, edgecolor='red', facecolor='none')
         self.ax_ap.add_patch(self.rect_ap)
         
         # 2. Lat (Y-Z)
-        if self.rect_lat: self.rect_lat.remove()
+        safe_remove(self.rect_lat, self.ax_lat)
         self.rect_lat = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
                                   linewidth=1, edgecolor='red', facecolor='none')
         self.ax_lat.add_patch(self.rect_lat)
         
         # 3. Axial (X-Y)
-        if self.rect_axial: self.rect_axial.remove()
+        safe_remove(self.rect_axial, self.ax_axial)
         self.rect_axial = Rectangle((min(x1, x2), min(y1, y2)), abs(x2-x1), abs(y2-y1),
                                     linewidth=1, edgecolor='red', facecolor='none')
         self.ax_axial.add_patch(self.rect_axial)
         
         # 4. Coronal (X-Z)
-        if self.rect_coronal: self.rect_coronal.remove()
+        safe_remove(self.rect_coronal, self.ax_coronal)
         self.rect_coronal = Rectangle((min(x1, x2), min(z1, z2)), abs(x2-x1), abs(z2-z1),
                                       linewidth=1, edgecolor='red', facecolor='none')
         self.ax_coronal.add_patch(self.rect_coronal)
         
         # 5. Sagittal (Y-Z)
-        if self.rect_sagittal: self.rect_sagittal.remove()
+        safe_remove(self.rect_sagittal, self.ax_sagittal)
         self.rect_sagittal = Rectangle((min(y1, y2), min(z1, z2)), abs(y2-y1), abs(z2-z1),
                                        linewidth=1, edgecolor='red', facecolor='none')
         self.ax_sagittal.add_patch(self.rect_sagittal)
