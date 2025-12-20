@@ -641,8 +641,9 @@ class TkAnnotator:
         
         # Legacy Format support: AP (x1, x2, z1, z2), Lat (y1, y2, z1, z2)
         # We save the unified Z into both to keep CSV compatibility
-        ap_str = f"{x1:.1f};{x2:.1f};{z1:.1f};{z2:.1f}"
-        lat_str = f"{y1:.1f};{y2:.1f};{z1:.1f};{z2:.1f}"
+        # Saving with high precision (.6f) to avoid rounding drift
+        ap_str = f"{x1:.6f};{x2:.6f};{z1:.6f};{z2:.6f}"
+        lat_str = f"{y1:.6f};{y2:.6f};{z1:.6f};{z2:.6f}"
         
         row = [
             self.case_id,
@@ -650,9 +651,9 @@ class TkAnnotator:
             name,
             lm_idx,
             lm_name,
-            f"{cx:.2f}",
-            f"{cy:.2f}",
-            f"{cz:.2f}",
+            f"{cx:.6f}",
+            f"{cy:.6f}",
+            f"{cz:.6f}",
             ap_str,
             lat_str
         ]
