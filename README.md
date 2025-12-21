@@ -58,11 +58,9 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
     - Click **Next LM** (or **Next Case**) to auto-save your current annotation and move to the next item.
     - Navigating to a new case/landmark resets the views to a clean state.
 
-5. **Interface Features**: 
-    - **Scrollable Sidebar**: If the window is too small, the left control panel will automatically become scrollable so you can reach all buttons.
-    - **Efficient Workflow**: The "Landmark Selection" menu is placed at the top for quick access.
-    - **CT HU Scale**: Use the dropdown to apply specific windowing presets (e.g., *Bone (Soft)*, *Bone (Medium)*, *Bone (Hard)*). This helps visualize different structures clearly.
-    - **Help**: Click the **Help / Instructions** button at the bottom left to view the study protocol. The help window is also scrollable and resizeable.
+5. **Optional**: 
+    - Use the "CT HU Scale" dropdown to change contrast (e.g., Bone vs Soft Tissue). This updates all views without losing your current selection context.
+    - Click the **Help / Instructions** button at the bottom left at any time to review the study protocol.
 
 ## Output
 
