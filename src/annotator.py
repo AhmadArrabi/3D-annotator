@@ -30,8 +30,9 @@ LANDMARKS = [
 ]
 HU_SCALES = {
     "Default": -1000,
-    "Bone (Soft)": 150, 
-    "Bone (Hard)": 350
+    "Bone (Soft)": -135,
+    "Bone (Medium)": 50, 
+    "Bone (Hard)": 200
 }
 ANNOT_DIR = "annotations"
 OUTPUT_CSV = os.path.join(ANNOT_DIR, "annotations.csv")
@@ -319,7 +320,7 @@ class TkAnnotator:
         ttk.Entry(search_frame, textvariable=self.case_id_search).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(search_frame, text="Go", command=self.goto_case, width=5).pack(side=tk.LEFT, padx=5)
 
-        # 3. Landmark Selection & Navigation (Moved up)
+        # 3. Landmark Selection & Navigation
         annot_group = ttk.LabelFrame(self.frame_controls, text="Landmark Selection", padding=10)
         annot_group.pack(fill=tk.X, pady=10)
         
