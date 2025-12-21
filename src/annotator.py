@@ -5,7 +5,7 @@ import time
 import numpy as np
 import nibabel as nib
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, scrolledtext
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from matplotlib.widgets import RectangleSelector
@@ -15,25 +15,24 @@ from datetime import datetime
 
 # --- Constants ---
 LANDMARKS = [
-    "1. Skull (Cranial Vault)",
-    "2. Right Humeral Head (shoulder)",
-    "3. Left Humeral Head (shoulder)",
-    "4. Right Scapula",
-    "5. Left Scapula",
-    "6. Right Humeroulnar Joint (elbow)",
-    "7. Left Humeroulnar Joint (elbow)",
-    "8. Right Radiocarpal Joint (wrist)",
-    "9. Left Radiocarpal Joint (wrist)",
-    "10. T1 Vertebral Body",
-    "11. Carina",
-    "12. Right Hemidiaphragm",
-    "13. Left Hemidiaphragm",
-    "14. T12 Vertebral Body"
+    "1. Skull (cranial vault)",
+    "2. C2",
+    "3. T1",
+    "4. Thorax (including both lungs and ribs)",
+    "5. Abdomen from hemidiaphragms through pelvis",
+    "6. T12",
+    "7. L5",
+    "8. Boney pelvis",
+    "9. Right humeral head",
+    "10. Left humeral head",
+    "11. Right femoral head",
+    "12. Left femoral head"
 ]
 HU_SCALES = {
     "Default": -1000,
-    "Bone (Soft)": 150, 
-    "Bone (Hard)": 350
+    "Bone (Soft)": -135,
+    "Bone (Medium)": 50, 
+    "Bone (Hard)": 200
 }
 ANNOT_DIR = "annotations"
 OUTPUT_CSV = os.path.join(ANNOT_DIR, "annotations.csv")
@@ -47,7 +46,7 @@ STUDY_INSTRUCTIONS = (
     "2. For each case, locate the requested landmarks.\n"
     "3. Draw bounding boxes on the AP and Lateral views.\n"
     "4. Use the MPR views to refine your selection.\n"
-    "5. Press 'Next' to save and proceed."
+    "5. Press 'Next' to save and proceed.\n\n"
 )
 
 # --- Login Dialog ---
@@ -71,15 +70,53 @@ class LoginDialog:
         style.configure("Body.TLabel", font=("Segoe UI", 11))
         
         # Content
-        ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        # Content Wrapper (Scrollable)
+        container = ttk.Frame(self.top)
+        container.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(self.top, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        canvas = tk.Canvas(container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         
-        lbl_info = ttk.Label(self.top, text=STUDY_INSTRUCTIONS, style="Body.TLabel", wraplength=450, justify="left")
-        lbl_info.pack(pady=10, padx=20)
+        self.scroll_frame = ttk.Frame(canvas)
+        
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # User requested Scrollbar on LEFT
+        scrollbar.pack(side="left", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        
+        canvas_window = canvas.create_window((0, 0), window=self.scroll_frame, anchor="nw")
+        
+        def on_config(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfig(canvas_window, width=event.width)
+            
+        self.scroll_frame.bind("<Configure>", on_config)
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
+        
+        # Bind mousewheel
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+        self.top.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        self.top.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # --- Content (Inside scroll_frame) ---
+        ttk.Label(self.scroll_frame, text="3D CT Annotation Study", style="Title.TLabel").pack(pady=20)
+        
+        # User requested "Neat" Label instead of Textbox, but we keep it inside scroll_frame
+        self.lbl_info = ttk.Label(self.scroll_frame, text=STUDY_INSTRUCTIONS, style="Body.TLabel", justify="left")
+        self.lbl_info.pack(pady=10, padx=20, fill=tk.X)
+        
+        # Dynamic Wrapping
+        def update_wrap(event):
+            # Update wraplength to match frame width minus padding
+            self.lbl_info.config(wraplength=event.width - 40)
+            
+        self.scroll_frame.bind("<Configure>", update_wrap, add="+")
         
         # Input
-        input_frame = ttk.Frame(self.top)
+        input_frame = ttk.Frame(self.scroll_frame)
         input_frame.pack(pady=30, fill=tk.X, padx=50)
         
         ttk.Label(input_frame, text="Please enter your Full Name:", style="Body.TLabel").pack(anchor=tk.W)
@@ -88,7 +125,7 @@ class LoginDialog:
         self.ent_name.bind("<Return>", self.on_submit)
         
         # Submit
-        btn_start = ttk.Button(self.top, text="Start Annotation", command=self.on_submit, width=20)
+        btn_start = ttk.Button(self.scroll_frame, text="Start Annotation", command=self.on_submit, width=20)
         btn_start.pack(pady=10)
         
         # Protocol to handle 'X' close
@@ -199,10 +236,58 @@ class TkAnnotator:
         self.paned = ttk.PanedWindow(self.main_frame, orient=tk.HORIZONTAL)
         self.paned.pack(fill=tk.BOTH, expand=True)
         
-        # 1. Controls Panel
-        self.frame_controls = ttk.Frame(self.paned, padding=20, width=350)
-        self.paned.add(self.frame_controls, weight=0) # Fixed width
+        # 1. Controls Panel (Scrollable Wrapper)
+        container = ttk.Frame(self.paned, width=380) # Container for canvas+scroll
+        self.paned.add(container, weight=0)
         
+        self.canvas_controls = tk.Canvas(container, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=self.canvas_controls.yview)
+        
+        self.frame_controls = ttk.Frame(self.canvas_controls, padding=10)
+        
+        # Link scrollbar
+        self.canvas_controls.configure(yscrollcommand=scrollbar.set)
+        
+        # Layout Scrollbar/Canvas
+        # User requested Scrollbar on LEFT
+        scrollbar.pack(side="left", fill="y")
+        self.canvas_controls.pack(side="left", fill="both", expand=True)
+        
+        # Create Window
+        # Use a window width slightly less than container to avoid horizontal scroll need
+        self.canvas_window = self.canvas_controls.create_window((0, 0), window=self.frame_controls, anchor="nw")
+        
+        # Dynamic resizing logic
+        def on_frame_configure(event):
+            self.canvas_controls.configure(scrollregion=self.canvas_controls.bbox("all"))
+
+        def on_canvas_configure(event):
+            # Force the inner frame to match the canvas width
+            self.canvas_controls.itemconfig(self.canvas_window, width=event.width)
+            
+        self.frame_controls.bind("<Configure>", on_frame_configure)
+        self.canvas_controls.bind("<Configure>", on_canvas_configure)
+        
+        # Mousewheel scrolling for the sidebar
+        def _on_mousewheel(event):
+            self.canvas_controls.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Bind only when mouse is over the sidebar
+        self.canvas_controls.bind_all("<MouseWheel>", _on_mousewheel) # Note: Global bind might affect MPR scrolling?
+        # Better to bind/unbind on enter/leave or check widget under cursor.
+        # Simple fix: Bind to the canvas and its children specifically? 
+        # Tkinter events bubble. Let's stick to global for now but check focus? 
+        # Actually, standard Tkinter "bind_all" will likely conflict with MPR scroll if we aren't careful.
+        # The safer way is binding only when hovering this frame.
+        
+        def _bind_mousewheel(event):
+            self.canvas_controls.bind_all("<MouseWheel>", _on_mousewheel)
+        def _unbind_mousewheel(event):
+            self.canvas_controls.unbind_all("<MouseWheel>")
+
+        self.frame_controls.bind('<Enter>', _bind_mousewheel)
+        self.frame_controls.bind('<Leave>', _unbind_mousewheel)
+
         # 2. Canvas Panel
         self.frame_canvas = ttk.Frame(self.paned, padding=5)
         self.paned.add(self.frame_canvas, weight=1)
@@ -235,14 +320,6 @@ class TkAnnotator:
         ttk.Entry(search_frame, textvariable=self.case_id_search).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(search_frame, text="Go", command=self.goto_case, width=5).pack(side=tk.LEFT, padx=5)
 
-        # HU Scale
-        win_group = ttk.LabelFrame(self.frame_controls, text="CT HU Scale", padding=10)
-        win_group.pack(fill=tk.X, pady=10)
-        self.cb_windowing = ttk.Combobox(win_group, values=list(HU_SCALES.keys()), state="readonly")
-        self.cb_windowing.current(0)
-        self.cb_windowing.bind("<<ComboboxSelected>>", self.on_scale_change)
-        self.cb_windowing.pack(fill=tk.X)
-        
         # 3. Landmark Selection & Navigation
         annot_group = ttk.LabelFrame(self.frame_controls, text="Landmark Selection", padding=10)
         annot_group.pack(fill=tk.X, pady=10)
@@ -257,6 +334,14 @@ class TkAnnotator:
         self.cb_landmarks.current(0)
         self.cb_landmarks.bind("<<ComboboxSelected>>", self.on_landmark_change)
         self.cb_landmarks.pack(fill=tk.X, pady=10)
+
+        # HU Scale (Moved down)
+        win_group = ttk.LabelFrame(self.frame_controls, text="CT HU Scale", padding=10)
+        win_group.pack(fill=tk.X, pady=10)
+        self.cb_windowing = ttk.Combobox(win_group, values=list(HU_SCALES.keys()), state="readonly")
+        self.cb_windowing.current(0)
+        self.cb_windowing.bind("<<ComboboxSelected>>", self.on_scale_change)
+        self.cb_windowing.pack(fill=tk.X)
         
         # Current Selection Info
         self.lbl_coords = ttk.Label(self.frame_controls, text="Selection: None", font=("Consolas", 10), foreground="red")
