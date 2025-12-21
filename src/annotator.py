@@ -319,15 +319,7 @@ class TkAnnotator:
         ttk.Entry(search_frame, textvariable=self.case_id_search).pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(search_frame, text="Go", command=self.goto_case, width=5).pack(side=tk.LEFT, padx=5)
 
-        # HU Scale
-        win_group = ttk.LabelFrame(self.frame_controls, text="CT HU Scale", padding=10)
-        win_group.pack(fill=tk.X, pady=10)
-        self.cb_windowing = ttk.Combobox(win_group, values=list(HU_SCALES.keys()), state="readonly")
-        self.cb_windowing.current(0)
-        self.cb_windowing.bind("<<ComboboxSelected>>", self.on_scale_change)
-        self.cb_windowing.pack(fill=tk.X)
-        
-        # 3. Landmark Selection & Navigation
+        # 3. Landmark Selection & Navigation (Moved up)
         annot_group = ttk.LabelFrame(self.frame_controls, text="Landmark Selection", padding=10)
         annot_group.pack(fill=tk.X, pady=10)
         
@@ -341,6 +333,14 @@ class TkAnnotator:
         self.cb_landmarks.current(0)
         self.cb_landmarks.bind("<<ComboboxSelected>>", self.on_landmark_change)
         self.cb_landmarks.pack(fill=tk.X, pady=10)
+
+        # HU Scale (Moved down)
+        win_group = ttk.LabelFrame(self.frame_controls, text="CT HU Scale", padding=10)
+        win_group.pack(fill=tk.X, pady=10)
+        self.cb_windowing = ttk.Combobox(win_group, values=list(HU_SCALES.keys()), state="readonly")
+        self.cb_windowing.current(0)
+        self.cb_windowing.bind("<<ComboboxSelected>>", self.on_scale_change)
+        self.cb_windowing.pack(fill=tk.X)
         
         # Current Selection Info
         self.lbl_coords = ttk.Label(self.frame_controls, text="Selection: None", font=("Consolas", 10), foreground="red")
