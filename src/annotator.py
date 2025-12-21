@@ -15,20 +15,18 @@ from datetime import datetime
 
 # --- Constants ---
 LANDMARKS = [
-    "1. Skull (Cranial Vault)",
-    "2. Right Humeral Head (shoulder)",
-    "3. Left Humeral Head (shoulder)",
-    "4. Right Scapula",
-    "5. Left Scapula",
-    "6. Right Humeroulnar Joint (elbow)",
-    "7. Left Humeroulnar Joint (elbow)",
-    "8. Right Radiocarpal Joint (wrist)",
-    "9. Left Radiocarpal Joint (wrist)",
-    "10. T1 Vertebral Body",
-    "11. Carina",
-    "12. Right Hemidiaphragm",
-    "13. Left Hemidiaphragm",
-    "14. T12 Vertebral Body"
+    "1. Skull (cranial vault)",
+    "2. C2",
+    "3. T1",
+    "4. Thorax (including both lungs and ribs)",
+    "5. Abdomen from hemidiaphragms through pelvis",
+    "6. T12",
+    "7. L5",
+    "8. Boney pelvis",
+    "9. Right humeral head",
+    "10. Left humeral head",
+    "11. Right femoral head",
+    "12. Left femoral head"
 ]
 HU_SCALES = {
     "Default": -1000,
@@ -47,7 +45,7 @@ STUDY_INSTRUCTIONS = (
     "2. For each case, locate the requested landmarks.\n"
     "3. Draw bounding boxes on the AP and Lateral views.\n"
     "4. Use the MPR views to refine your selection.\n"
-    "5. Press 'Next' to save and proceed."
+    "5. Press 'Next' to save and proceed.\n\n"
 )
 
 # --- Login Dialog ---
