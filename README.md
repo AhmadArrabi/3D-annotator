@@ -51,14 +51,18 @@ The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
     - **AP/Lateral Views**: Click and drag to draw a bounding box. 
     - **Interactive MPR**: As soon as you draw a box, the MPR views (Bottom Row) will automatically populate with the specific slice centered on your selection.
     - **Refine**: You can adjust the bounding box on **ANY** of the 5 views (AP, Lat, Axial, Coronal, Sagittal). Changes are synchronized instantly across all views.
+    - **MPR Scrolling**: Hover over any MPR view (Axial, Coronal, Sagittal) and use the **Mouse Wheel** to scroll through slices.
+        - *Note*: Scrolling also moves the bounding box in that dimension, allowing for precise 3D positioning.
 
 4.  **Save & Continue**:
     - Click **Next LM** (or **Next Case**) to auto-save your current annotation and move to the next item.
     - Navigating to a new case/landmark resets the views to a clean state.
 
-5. **Optional**: 
-    - Use the "CT HU Scale" dropdown to change contrast (e.g., Bone vs Soft Tissue). This updates all views without losing your current selection context.
-    - Click the **Help / Instructions** button at the bottom left at any time to review the study protocol.
+5. **Interface Features**: 
+    - **Scrollable Sidebar**: If the window is too small, the left control panel will automatically become scrollable so you can reach all buttons.
+    - **Efficient Workflow**: The "Landmark Selection" menu is placed at the top for quick access.
+    - **CT HU Scale**: Use the dropdown to apply specific windowing presets (e.g., *Bone (Soft)*, *Bone (Medium)*, *Bone (Hard)*). This helps visualize different structures clearly.
+    - **Help**: Click the **Help / Instructions** button at the bottom left to view the study protocol. The help window is also scrollable and resizeable.
 
 ## Output
 
