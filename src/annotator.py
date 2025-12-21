@@ -341,6 +341,10 @@ class TkAnnotator:
         img = nib.load(path)
         img = nib.as_closest_canonical(img)
         self.raw_data = img.get_fdata() # Keep raw copy
+        
+        # FIX: Flip X-axis to match Radiological Convention (Patient Right on Screen Left)
+        self.raw_data = np.flip(self.raw_data, axis=0)
+        
         self.voxel_sizes = img.header.get_zooms()
         
         self.apply_hu_scale()
