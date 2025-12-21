@@ -159,6 +159,15 @@ class TkAnnotator:
         self.rect_coronal = None
         self.rect_sagittal = None
         
+        # Visual Elements State
+        self.rect_ap = None
+        self.rect_lat = None
+        self.rect_axial = None
+        self.rect_coronal = None
+        self.rect_sagittal = None
+        
+        self.current_slices = [0, 0, 0] # [z, y, x]
+        
         self.setup_theme()
         self.setup_layout()
         self.setup_controls()
@@ -303,6 +312,7 @@ class TkAnnotator:
         
         self.canvas.mpl_connect('draw_event', self.on_draw) 
         self.canvas.mpl_connect('button_press_event', self.on_stat_click)
+        self.canvas.mpl_connect('scroll_event', self.on_scroll)
 
     def setup_instructions_overlay(self):
         # Styled Protocol Frame
@@ -571,21 +581,26 @@ class TkAnnotator:
         return (x1+x2)/2, (y1+y2)/2, (z1+z2)/2
 
     # --- MPR ---
+    # --- MPR ---
     def visual_check(self):
-        # Just forces a redraw of the MPR slices based on current center
-        if not self.box_3d:
-            return
+        # Update current slices based on box center
+        if not self.box_3d: return
 
         x1, x2, y1, y2, z1, z2 = self.box_3d
         cx, cy, cz = (x1+x2)/2, (y1+y2)/2, (z1+z2)/2
         
         ix, iy, iz = int(cx), int(cy), int(cz)
         
-        # Clamping
+        # Clamp & Store
         ix = max(0, min(ix, self.data.shape[0]-1))
         iy = max(0, min(iy, self.data.shape[1]-1))
         iz = max(0, min(iz, self.data.shape[2]-1))
         
+        self.current_slices = [iz, iy, ix]
+        self.refresh_mpr_views()
+
+    def refresh_mpr_views(self):
+        iz, iy, ix = self.current_slices
         dx, dy, dz = self.voxel_sizes
         
         # Helper for display
@@ -594,24 +609,57 @@ class TkAnnotator:
             ax.imshow(data, cmap='gray', origin='lower')
             ax.set_aspect(aspect)
             ax.set_title(title)
-            
-        # Axial (XY)
+            return ax
+
+        # Axial (XY) - Uses Z index
         show_slice(self.ax_axial, self.data[:, :, iz].T, dy/dx, f"Axial (Z={iz})")
         self.rs_axial = RectangleSelector(self.ax_axial, self.on_select_axial, useblit=True, button=[1], 
                                           minspanx=5, minspany=5, spancoords='pixels', interactive=False)
                                           
-        # Coronal (XZ)
+        # Coronal (XZ) - Uses Y index
         show_slice(self.ax_coronal, self.data[:, iy, :].T, dz/dx, f"Coronal (Y={iy})")
         self.rs_coronal = RectangleSelector(self.ax_coronal, self.on_select_coronal, useblit=True, button=[1], 
                                             minspanx=5, minspany=5, spancoords='pixels', interactive=False)
                                             
-        # Sagittal (YZ)
+        # Sagittal (YZ) - Uses X index
         show_slice(self.ax_sagittal, self.data[ix, :, :].T, dz/dy, f"Sagittal (X={ix})")
         self.rs_sagittal = RectangleSelector(self.ax_sagittal, self.on_select_sagittal, useblit=True, button=[1], 
                                              minspanx=5, minspany=5, spancoords='pixels', interactive=False)
         
         # Draw the boxes on top of new slices
         self.display_annotation()
+
+    def on_scroll(self, event):
+        if not event.inaxes or not self.data is not None: return
+        if not self.box_3d: return # Can't move a box that doesn't exist
+        
+        # Determine movement axis
+        # Axial (Z), Coronal (Y), Sagittal (X)
+        step = 1 if event.button == 'up' else -1
+        
+        # Helper to shift box dims
+        def shift_box(indices, delta, max_dim):
+            # Check bounds before moving
+            vals = [self.box_3d[i] for i in indices]
+            if min(vals) + delta < 0 or max(vals) + delta >= max_dim:
+                return # Out of bounds
+            
+            for i in indices:
+                self.box_3d[i] += delta
+        
+        if event.inaxes == self.ax_axial:
+            shift_box([4, 5], step, self.data.shape[2]) # Z
+        elif event.inaxes == self.ax_coronal:
+            shift_box([2, 3], step, self.data.shape[1]) # Y
+        elif event.inaxes == self.ax_sagittal:
+            shift_box([0, 1], step, self.data.shape[0]) # X
+        else:
+            return
+            
+        # Trigger full update (Coordinates, Slices, Display)
+        self.visual_check() # Updates slices to match new box center
+        self.update_coords_label()
+        self.is_submitted = False
         
     def submit_manual(self):
         was_submitted = self.is_submitted
