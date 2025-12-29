@@ -248,6 +248,9 @@ class TkAnnotator:
         self.setup_controls()
         self.setup_canvas()
         
+        # Progress Tracker
+        self.update_progress_labels()
+        
         # Load first case
         self.load_case(0)
 
@@ -339,6 +342,8 @@ class TkAnnotator:
         self.lbl_current_lm = ttk.Label(self.frame_controls, text="Initial Landmark", style="Big.TLabel", wraplength=330)
         self.lbl_current_lm.pack(fill=tk.X, pady=(0, 20))
         
+        self.lbl_current_lm.pack(fill=tk.X, pady=(0, 5))
+
         # User Info Removed (Handled by Login)
         
         # Navigation
@@ -400,6 +405,16 @@ class TkAnnotator:
         ttk.Button(self.frame_controls, text="Help / Instructions", command=self.show_help).pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
     def setup_canvas(self):
+        # 0. Banner for Status (Progress & Warnings) - High Visibilty
+        self.frame_banner = ttk.Frame(self.frame_canvas, padding=(0, 0, 0, 10))
+        self.frame_banner.pack(side=tk.TOP, fill=tk.X)
+        
+        self.lbl_progress = ttk.Label(self.frame_banner, text="Progress: --", font=("Segoe UI", 16, "bold"))
+        self.lbl_progress.pack(side=tk.LEFT, padx=20)
+        
+        self.lbl_region_warn = ttk.Label(self.frame_banner, text="", font=("Segoe UI", 14, "bold"), foreground="red")
+        self.lbl_region_warn.pack(side=tk.LEFT, padx=20)
+        
         # Matplotlib Figure
         # 2 Rows: Top (AP, Lat), Bottom (MPRs)
         self.fig = Figure(figsize=(15, 9), dpi=100)
@@ -486,6 +501,7 @@ class TkAnnotator:
         
         # Initial Display
         self.on_landmark_change(None)
+        self.update_progress_labels()
 
     def log_statistics(self):
         try:
@@ -881,6 +897,9 @@ class TkAnnotator:
             msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
             self.lbl_status.config(text=msg)
             self.is_submitted = True
+            
+            # Update progress on successful save
+            self.update_progress_labels()
             
         except PermissionError:
             if not silent: messagebox.showerror("Error", "A CSV file is open. Please close it and retry.")
