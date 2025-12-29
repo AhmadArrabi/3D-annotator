@@ -542,15 +542,65 @@ class TkAnnotator:
         self.load_case(self.case_index - 1)
 
     def next_case(self): 
+        # Check completion
+        if not self.check_case_completion():
+             # Warn user
+             if not messagebox.askyesno("Incomplete Case", "You have not completed all required landmarks for this case.\nAre you sure you want to proceed to the next case?"):
+                 return
+
         self.submit_annotation(silent=True) # Auto-save
         self.log_statistics()
         self.load_case(self.case_index + 1)
     
+    def check_case_completion(self):
+        # Determine total needed
+        total_landmarks = len(LANDMARKS)
+        excluded_indices = set()
+        
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            excluded_indices = EXCLUDED_LANDMARKS[self.current_case_type]
+            total_landmarks -= len(excluded_indices)
+            
+        # Count done for THIS user
+        done_count = 0
+        current_user = self.resident_name.get().strip()
+        
+        if os.path.exists(OUTPUT_CSV):
+            try:
+                with open(OUTPUT_CSV, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    next(reader, None) # Skip header
+                    
+                    completed_lms = set()
+                    for r in reader:
+                        # Check CaseID AND Resident Name
+                        if len(r) > 4 and r[0] == self.case_id and r[2] == current_user:
+                            completed_lms.add(r[3]) 
+                            
+                    # Filter valid
+                    if excluded_indices:
+                         valid_completed = 0
+                         for lm_id in completed_lms:
+                             try:
+                                 idx = int(lm_id) - 1
+                                 if idx not in excluded_indices:
+                                     valid_completed += 1
+                             except:
+                                 pass
+                         done_count = valid_completed
+                    else:
+                        done_count = len(completed_lms)
+                        
+            except Exception:
+                pass
+                
+        return done_count >= total_landmarks
+    
     def goto_case(self):
         self.submit_annotation(silent=True)
         search = self.case_id_search.get().strip()
-        for i, f in enumerate(self.file_list):
-            if search in f:
+        for i, info in enumerate(self.file_list):
+            if search in info['filename']:
                 self.load_case(i)
                 return
         messagebox.showinfo("Not Found", f"Case ID {search} not found.")
