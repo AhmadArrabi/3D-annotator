@@ -479,12 +479,15 @@ class TkAnnotator:
         if index < 0 or index >= len(self.file_list): return
         
         self.case_index = index
-        filename = self.file_list[index]
+        case_info = self.file_list[index]
+        self.current_case_type = case_info['type']
+        
+        filename = case_info['filename']
         self.case_id = filename.split('_')[0]
         self.case_id_search.set(self.case_id)
         
-        path = os.path.join(self.data_dir, filename)
-        print(f"Loading {filename}...")
+        path = os.path.join(self.data_dir, case_info['rel_path'])
+        print(f"Loading {path} ({self.current_case_type})...")
         
         img = nib.load(path)
         img = nib.as_closest_canonical(img)
@@ -609,6 +612,14 @@ class TkAnnotator:
         # Update Big Label
         lm_text = LANDMARKS[self.current_landmark_idx]
         self.lbl_current_lm.config(text=lm_text)
+        
+        # Update Warning Label based on Region
+        warning_msg = ""
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            if self.current_landmark_idx in EXCLUDED_LANDMARKS[self.current_case_type]:
+                warning_msg = f"NOTE: {lm_text.split('. ')[1]} is not needed for this {self.current_case_type.upper()} CT."
+        
+        self.lbl_region_warn.config(text=warning_msg)
         
         # Try to load existing
         if not self.load_existing_annotation():
@@ -838,7 +849,7 @@ class TkAnnotator:
         
         row = [
             self.case_id,
-            os.path.basename(self.file_list[self.case_index]),
+            self.file_list[self.case_index]['filename'],
             name,
             lm_idx,
             lm_name,
