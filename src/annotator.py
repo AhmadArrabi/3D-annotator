@@ -28,6 +28,14 @@ LANDMARKS = [
     "11. Right femoral head",
     "12. Left femoral head"
 ]
+
+# Body region specific exclusions
+# Upper: Skull to Abdomen (No Pelvis, No Femoral)
+# Lower: Neck to Knees (No Skull)
+EXCLUDED_LANDMARKS = {
+    "upper": {7, 10, 11}, # Indices of: Boney pelvis, R Femoral, L Femoral
+    "lower": {0}          # Indices of: Skull
+}
 HU_SCALES = {
     "Default": -1000,
     "Bone (Soft)": -135,
@@ -153,9 +161,39 @@ class TkAnnotator:
         self.root.state("zoomed") # Maximized window
         
         self.data_dir = data_dir
-        self.file_list = sorted([f for f in os.listdir(data_dir) if f.endswith('.nii.gz')])
+        
+        # Scan for files in upper/lower subdirectories or root
+        self.file_list = [] # List of dicts: {'path': relative_path, 'type': 'unknown'|'upper'|'lower', 'id': id}
+        
+        # Check specific structure first
+        for region in ['upper', 'lower']:
+            region_path = os.path.join(data_dir, region)
+            if os.path.exists(region_path):
+                for f in os.listdir(region_path):
+                    if f.endswith('.nii.gz'):
+                        # Using forward slash for consistency if needed, but os.path.join is safer
+                        rel_path = os.path.join(region, f)
+                        self.file_list.append({
+                            'rel_path': rel_path,
+                            'type': region,
+                            'filename': f
+                        })
+        
+        # Fallback to root if empty (backward compatibility)
         if not self.file_list:
-            messagebox.showerror("Error", "No .nii.gz files found in data directory!")
+            for f in os.listdir(data_dir):
+                if f.endswith('.nii.gz'):
+                    self.file_list.append({
+                        'rel_path': f,
+                        'type': 'unknown',
+                        'filename': f
+                    })
+        
+        # Sort by filename
+        self.file_list.sort(key=lambda x: x['filename'])
+
+        if not self.file_list:
+            messagebox.showerror("Error", "No .nii.gz files found in data directory (looked in root, data/upper, data/lower)!")
             sys.exit(1)
             
         # Stats Setup
