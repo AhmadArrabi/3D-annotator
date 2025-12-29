@@ -21,18 +21,24 @@ An annotation tool for localizing landmarks on CT scans. The tool provides a syn
 
 ## Setup Data
 
-The tool expects NIfTI files (`.nii.gz`) in the `data` directory.
+The tool expects NIfTI files (`.nii.gz`) organized by body region in the `data` directory.
 
-1.  Create a `data` folder in the project root if it doesn't exist.
+1.  Create `upper` and `lower` folders inside `data` (optional but recommended).
 2.  Place your CT scan files inside:
     ```
     3D-annotator/
     ├── data/
-    │   ├── case001_ct.nii.gz
-    │   └── case002_ct.nii.gz
+    │   ├── upper/
+    │   │   └── case001_upper.nii.gz
+    │   │   └── ...
+    │   ├── lower/
+    │   │   └── case002_lower.nii.gz
+    │   │   └── ...
+    │   └── ...
     ├── src/
     │   └── annotator.py
     ```
+    *(Note: Files in the root `data/` folder are also supported as generic cases)*
 
 ## Step-by-Step Guide
 

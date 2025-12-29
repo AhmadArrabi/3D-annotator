@@ -28,6 +28,14 @@ LANDMARKS = [
     "11. Right femoral head",
     "12. Left femoral head"
 ]
+
+# Body region specific exclusions
+# Upper: Skull to Abdomen (No Pelvis, No Femoral)
+# Lower: Neck to Knees (No Skull)
+EXCLUDED_LANDMARKS = {
+    "upper": {7, 10, 11}, # Indices of: Boney pelvis, R Femoral, L Femoral
+    "lower": {0}          # Indices of: Skull
+}
 HU_SCALES = {
     "Default": -1000,
     "Bone (Soft)": -135,
@@ -153,9 +161,39 @@ class TkAnnotator:
         self.root.state("zoomed") # Maximized window
         
         self.data_dir = data_dir
-        self.file_list = sorted([f for f in os.listdir(data_dir) if f.endswith('.nii.gz')])
+        
+        # Scan for files in upper/lower subdirectories or root
+        self.file_list = [] # List of dicts: {'path': relative_path, 'type': 'unknown'|'upper'|'lower', 'id': id}
+        
+        # Check specific structure first
+        for region in ['upper', 'lower']:
+            region_path = os.path.join(data_dir, region)
+            if os.path.exists(region_path):
+                for f in os.listdir(region_path):
+                    if f.endswith('.nii.gz'):
+                        # Using forward slash for consistency if needed, but os.path.join is safer
+                        rel_path = os.path.join(region, f)
+                        self.file_list.append({
+                            'rel_path': rel_path,
+                            'type': region,
+                            'filename': f
+                        })
+        
+        # Fallback to root if empty (backward compatibility)
         if not self.file_list:
-            messagebox.showerror("Error", "No .nii.gz files found in data directory!")
+            for f in os.listdir(data_dir):
+                if f.endswith('.nii.gz'):
+                    self.file_list.append({
+                        'rel_path': f,
+                        'type': 'unknown',
+                        'filename': f
+                    })
+        
+        # Sort by filename
+        self.file_list.sort(key=lambda x: x['filename'])
+
+        if not self.file_list:
+            messagebox.showerror("Error", "No .nii.gz files found in data directory (looked in root, data/upper, data/lower)!")
             sys.exit(1)
             
         # Stats Setup
@@ -209,6 +247,9 @@ class TkAnnotator:
         self.setup_layout()
         self.setup_controls()
         self.setup_canvas()
+        
+        # Progress Tracker
+        self.update_progress_labels()
         
         # Load first case
         self.load_case(0)
@@ -301,6 +342,8 @@ class TkAnnotator:
         self.lbl_current_lm = ttk.Label(self.frame_controls, text="Initial Landmark", style="Big.TLabel", wraplength=330)
         self.lbl_current_lm.pack(fill=tk.X, pady=(0, 20))
         
+        self.lbl_current_lm.pack(fill=tk.X, pady=(0, 5))
+
         # User Info Removed (Handled by Login)
         
         # Navigation
@@ -362,6 +405,16 @@ class TkAnnotator:
         ttk.Button(self.frame_controls, text="Help / Instructions", command=self.show_help).pack(side=tk.BOTTOM, fill=tk.X, pady=10)
 
     def setup_canvas(self):
+        # 0. Banner for Status (Progress & Warnings) - High Visibilty
+        self.frame_banner = ttk.Frame(self.frame_canvas, padding=(0, 0, 0, 10))
+        self.frame_banner.pack(side=tk.TOP, fill=tk.X)
+        
+        self.lbl_progress = ttk.Label(self.frame_banner, text="Progress: --", font=("Segoe UI", 16, "bold"))
+        self.lbl_progress.pack(side=tk.LEFT, padx=20)
+        
+        self.lbl_region_warn = ttk.Label(self.frame_banner, text="", font=("Segoe UI", 14, "bold"), foreground="red")
+        self.lbl_region_warn.pack(side=tk.LEFT, padx=20)
+        
         # Matplotlib Figure
         # 2 Rows: Top (AP, Lat), Bottom (MPRs)
         self.fig = Figure(figsize=(15, 9), dpi=100)
@@ -426,12 +479,15 @@ class TkAnnotator:
         if index < 0 or index >= len(self.file_list): return
         
         self.case_index = index
-        filename = self.file_list[index]
+        case_info = self.file_list[index]
+        self.current_case_type = case_info['type']
+        
+        filename = case_info['filename']
         self.case_id = filename.split('_')[0]
         self.case_id_search.set(self.case_id)
         
-        path = os.path.join(self.data_dir, filename)
-        print(f"Loading {filename}...")
+        path = os.path.join(self.data_dir, case_info['rel_path'])
+        print(f"Loading {path} ({self.current_case_type})...")
         
         img = nib.load(path)
         img = nib.as_closest_canonical(img)
@@ -448,6 +504,7 @@ class TkAnnotator:
         
         # Initial Display
         self.on_landmark_change(None)
+        self.update_progress_labels()
 
     def log_statistics(self):
         try:
@@ -485,15 +542,65 @@ class TkAnnotator:
         self.load_case(self.case_index - 1)
 
     def next_case(self): 
+        # Check completion
+        if not self.check_case_completion():
+             # Warn user
+             if not messagebox.askyesno("Incomplete Case", "You have not completed all required landmarks for this case.\nAre you sure you want to proceed to the next case?"):
+                 return
+
         self.submit_annotation(silent=True) # Auto-save
         self.log_statistics()
         self.load_case(self.case_index + 1)
     
+    def check_case_completion(self):
+        # Determine total needed
+        total_landmarks = len(LANDMARKS)
+        excluded_indices = set()
+        
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            excluded_indices = EXCLUDED_LANDMARKS[self.current_case_type]
+            total_landmarks -= len(excluded_indices)
+            
+        # Count done for THIS user
+        done_count = 0
+        current_user = self.resident_name.get().strip()
+        
+        if os.path.exists(OUTPUT_CSV):
+            try:
+                with open(OUTPUT_CSV, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    next(reader, None) # Skip header
+                    
+                    completed_lms = set()
+                    for r in reader:
+                        # Check CaseID AND Resident Name
+                        if len(r) > 4 and r[0] == self.case_id and r[2] == current_user:
+                            completed_lms.add(r[3]) 
+                            
+                    # Filter valid
+                    if excluded_indices:
+                         valid_completed = 0
+                         for lm_id in completed_lms:
+                             try:
+                                 idx = int(lm_id) - 1
+                                 if idx not in excluded_indices:
+                                     valid_completed += 1
+                             except:
+                                 pass
+                         done_count = valid_completed
+                    else:
+                        done_count = len(completed_lms)
+                        
+            except Exception:
+                pass
+                
+        return done_count >= total_landmarks
+    
     def goto_case(self):
         self.submit_annotation(silent=True)
         search = self.case_id_search.get().strip()
-        for i, f in enumerate(self.file_list):
-            if search in f:
+        for i, info in enumerate(self.file_list):
+            if search in info['filename']:
                 self.load_case(i)
                 return
         messagebox.showinfo("Not Found", f"Case ID {search} not found.")
@@ -555,6 +662,14 @@ class TkAnnotator:
         # Update Big Label
         lm_text = LANDMARKS[self.current_landmark_idx]
         self.lbl_current_lm.config(text=lm_text)
+        
+        # Update Warning Label based on Region
+        warning_msg = ""
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            if self.current_landmark_idx in EXCLUDED_LANDMARKS[self.current_case_type]:
+                warning_msg = f"NOTE: {lm_text.split('. ')[1]} is not needed for this {self.current_case_type.upper()} CT."
+        
+        self.lbl_region_warn.config(text=warning_msg)
         
         # Try to load existing
         if not self.load_existing_annotation():
@@ -784,7 +899,7 @@ class TkAnnotator:
         
         row = [
             self.case_id,
-            os.path.basename(self.file_list[self.case_index]),
+            self.file_list[self.case_index]['filename'],
             name,
             lm_idx,
             lm_name,
@@ -843,6 +958,9 @@ class TkAnnotator:
             msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
             self.lbl_status.config(text=msg)
             self.is_submitted = True
+            
+            # Update progress on successful save
+            self.update_progress_labels()
             
         except PermissionError:
             if not silent: messagebox.showerror("Error", "A CSV file is open. Please close it and retry.")
@@ -949,7 +1067,59 @@ class TkAnnotator:
         ttk.Label(root, text=STUDY_INSTRUCTIONS, wraplength=450, justify="left").pack(padx=20, pady=10)
         
         ttk.Button(root, text="Close", command=root.destroy).pack(pady=20)
+
+    def update_progress_labels(self):
+        if not hasattr(self, 'case_id'): return
         
+        # Determine total needed based on case type
+        total_landmarks = len(LANDMARKS)
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            total_landmarks -= len(EXCLUDED_LANDMARKS[self.current_case_type])
+            
+        # Count done
+        done_count = 0
+        if os.path.exists(OUTPUT_CSV):
+            try:
+                with open(OUTPUT_CSV, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    header = next(reader, None) # Skip header
+                    
+                    # Schema: CaseID, Filename, Resident, LM_Idx, LM_Name...
+                    # We look for rows with current CaseID
+                    completed_lms = set()
+                    for r in reader:
+                        if len(r) > 4 and r[0] == self.case_id and r[2] == self.resident_name.get().strip():
+                            completed_lms.add(r[3]) # Use LM Index as unique ID
+                    
+                    # Filter out excluded ones if any
+                    if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+                         # EXCLUDED_LANDMARKS uses 0-based indices
+                         # CSV uses 1-based "1", "2"
+                         
+                         valid_completed = 0
+                         for lm_id in completed_lms:
+                             try:
+                                 # Convert CSV "1" -> 0
+                                 idx = int(lm_id) - 1
+                                 if idx not in EXCLUDED_LANDMARKS[self.current_case_type]:
+                                     valid_completed += 1
+                             except:
+                                 pass
+                         done_count = valid_completed
+                    else:
+                        done_count = len(completed_lms)
+                        
+            except Exception as e:
+                print(f"Error reading progress: {e}")
+                
+        # Update Label
+        msg = f"Progress: {done_count}/{total_landmarks}"
+        if done_count >= total_landmarks:
+             msg += " (Done)"
+             self.lbl_progress.config(foreground="green", text=msg)
+        else:
+             self.lbl_progress.config(foreground="black", text=msg) # Reset color if not done
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
