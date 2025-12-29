@@ -1067,7 +1067,59 @@ class TkAnnotator:
         ttk.Label(root, text=STUDY_INSTRUCTIONS, wraplength=450, justify="left").pack(padx=20, pady=10)
         
         ttk.Button(root, text="Close", command=root.destroy).pack(pady=20)
+
+    def update_progress_labels(self):
+        if not hasattr(self, 'case_id'): return
         
+        # Determine total needed based on case type
+        total_landmarks = len(LANDMARKS)
+        if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+            total_landmarks -= len(EXCLUDED_LANDMARKS[self.current_case_type])
+            
+        # Count done
+        done_count = 0
+        if os.path.exists(OUTPUT_CSV):
+            try:
+                with open(OUTPUT_CSV, 'r', newline='') as f:
+                    reader = csv.reader(f)
+                    header = next(reader, None) # Skip header
+                    
+                    # Schema: CaseID, Filename, Resident, LM_Idx, LM_Name...
+                    # We look for rows with current CaseID
+                    completed_lms = set()
+                    for r in reader:
+                        if len(r) > 4 and r[0] == self.case_id and r[2] == self.resident_name.get().strip():
+                            completed_lms.add(r[3]) # Use LM Index as unique ID
+                    
+                    # Filter out excluded ones if any
+                    if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
+                         # EXCLUDED_LANDMARKS uses 0-based indices
+                         # CSV uses 1-based "1", "2"
+                         
+                         valid_completed = 0
+                         for lm_id in completed_lms:
+                             try:
+                                 # Convert CSV "1" -> 0
+                                 idx = int(lm_id) - 1
+                                 if idx not in EXCLUDED_LANDMARKS[self.current_case_type]:
+                                     valid_completed += 1
+                             except:
+                                 pass
+                         done_count = valid_completed
+                    else:
+                        done_count = len(completed_lms)
+                        
+            except Exception as e:
+                print(f"Error reading progress: {e}")
+                
+        # Update Label
+        msg = f"Progress: {done_count}/{total_landmarks}"
+        if done_count >= total_landmarks:
+             msg += " (Done)"
+             self.lbl_progress.config(foreground="green", text=msg)
+        else:
+             self.lbl_progress.config(foreground="black", text=msg) # Reset color if not done
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
