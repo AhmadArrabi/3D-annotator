@@ -213,3 +213,6 @@ statistics/
 
 # files
 *.csv
+
+#mac
+.DS_Store
