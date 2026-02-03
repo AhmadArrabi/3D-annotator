@@ -33,8 +33,8 @@ LANDMARKS = [
 # Upper: Skull to Abdomen (No Pelvis, No Femoral)
 # Lower: Neck to Knees (No Skull)
 EXCLUDED_LANDMARKS = {
-    "upper": {7, 10, 11, 6}, # Indices of: Boney pelvis, R Femoral, L Femoral, L5
-    "lower": {0}          # Indices of: Skull
+    "upper": {7, 10, 11, 6, 4}, # Indices of: Boney pelvis, R Femoral, L Femoral, L5
+    "lower": {0, 1}          # Indices of: Skull
 }
 HU_SCALES = {
     "Default": -1000,
