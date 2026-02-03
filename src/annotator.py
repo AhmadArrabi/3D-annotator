@@ -158,7 +158,7 @@ class TkAnnotator:
     def __init__(self, root, data_dir, resident_name):
         self.root = root
         self.root.title("3D CT Annotator")
-        self.root.state("zoomed") # Maximized window
+        #self.root.state("zoomed") # Maximized window
         
         self.data_dir = data_dir
         
