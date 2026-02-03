@@ -33,8 +33,8 @@ LANDMARKS = [
 # Upper: Skull to Abdomen (No Pelvis, No Femoral)
 # Lower: Neck to Knees (No Skull)
 EXCLUDED_LANDMARKS = {
-    "upper": {7, 10, 11, 6}, # Indices of: Boney pelvis, R Femoral, L Femoral, L5
-    "lower": {0}          # Indices of: Skull
+    "upper": {7, 10, 11, 6, 4}, # Indices of: Boney pelvis, R Femoral, L Femoral, L5
+    "lower": {0, 1}          # Indices of: Skull
 }
 HU_SCALES = {
     "Default": -1000,
@@ -564,6 +564,7 @@ class TkAnnotator:
         # Count done for THIS user
         done_count = 0
         current_user = self.resident_name.get().strip()
+        current_filename = self.file_list[self.case_index]['filename']
         
         if os.path.exists(OUTPUT_CSV):
             try:
@@ -573,9 +574,10 @@ class TkAnnotator:
                     
                     completed_lms = set()
                     for r in reader:
-                        # Check CaseID AND Resident Name
+                        # Check CaseID AND Resident Name AND Filename
                         if len(r) > 4 and r[0] == self.case_id and r[2] == current_user:
-                            completed_lms.add(r[3]) 
+                            if r[1] == current_filename:
+                                completed_lms.add(r[3]) 
                             
                     # Filter valid
                     if excluded_indices:
@@ -897,6 +899,9 @@ class TkAnnotator:
         ap_str = f"{x1:.6f};{x2:.6f};{z1:.6f};{z2:.6f}"
         lat_str = f"{y1:.6f};{y2:.6f};{z1:.6f};{z2:.6f}"
         
+        # Determine Scan Type
+        scan_type = getattr(self, 'current_case_type', 'unknown')
+
         row = [
             self.case_id,
             self.file_list[self.case_index]['filename'],
@@ -907,7 +912,8 @@ class TkAnnotator:
             f"{cy:.6f}",
             f"{cz:.6f}",
             ap_str,
-            lat_str
+            lat_str,
+            scan_type
         ]
         
         try:
@@ -952,7 +958,7 @@ class TkAnnotator:
                 with open(fname, 'a', newline='') as f:
                     writer = csv.writer(f)
                     if write_header:
-                        writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box'])
+                        writer.writerow(['CaseID', 'FileName', 'Resident', 'LandmarkIdx', 'LandmarkName', 'X', 'Y', 'Z', 'AP_Box', 'Lat_Box', 'ScanType'])
                     writer.writerow(row)
             
             msg = f"Saved {lm_name}!" if not silent else f"Auto-saved {lm_name}!"
@@ -974,6 +980,9 @@ class TkAnnotator:
         if not name: return False
         
         lm_idx = LANDMARKS[self.current_landmark_idx].split('.')[0]
+        current_filename = self.file_list[self.case_index]['filename']
+        current_type = getattr(self, 'current_case_type', 'unknown')
+        
         target_row = None
         
         try:
@@ -984,9 +993,18 @@ class TkAnnotator:
                 
                 for row in reader:
                     if len(row) < 10: continue
-                    r_case, _, r_name, r_lm_idx = row[0], row[1], row[2], row[3]
+                    r_case, r_fname, r_name, r_lm_idx = row[0], row[1], row[2], row[3]
                     
                     if r_case == self.case_id and r_name == name and r_lm_idx == lm_idx:
+                        # 1. Enforce Filename Match (The Core Fix)
+                        if r_fname != current_filename:
+                            continue
+                            
+                        # 2. Check ScanType if available in row
+                        if len(row) > 10:
+                            if row[10] != current_type:
+                                continue
+                                
                         target_row = row
             
             if target_row:
@@ -1078,6 +1096,8 @@ class TkAnnotator:
             
         # Count done
         done_count = 0
+        current_filename = self.file_list[self.case_index]['filename']
+        
         if os.path.exists(OUTPUT_CSV):
             try:
                 with open(OUTPUT_CSV, 'r', newline='') as f:
@@ -1089,7 +1109,9 @@ class TkAnnotator:
                     completed_lms = set()
                     for r in reader:
                         if len(r) > 4 and r[0] == self.case_id and r[2] == self.resident_name.get().strip():
-                            completed_lms.add(r[3]) # Use LM Index as unique ID
+                            # Strict Check: Filename must match
+                            if r[1] == current_filename:
+                                completed_lms.add(r[3]) # Use LM Index as unique ID
                     
                     # Filter out excluded ones if any
                     if hasattr(self, 'current_case_type') and self.current_case_type in EXCLUDED_LANDMARKS:
