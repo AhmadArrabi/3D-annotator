@@ -13,7 +13,7 @@ An annotation tool for localizing landmarks on CT scans. The tool provides a syn
     ```
 
 2.  **Install Dependencies**:
-    Ensure you have Python (<= 3.14) installed. Then run:
+    Ensure you have [Python](https://www.python.org/downloads/) (<= 3.14) installed. Then run:
     ```bash
     pip install -r requirements.txt
     ```
